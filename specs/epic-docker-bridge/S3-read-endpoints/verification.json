@@ -1,0 +1,35 @@
+{
+  "story_id": "S3",
+  "verification_questions": [
+    {
+      "question": "Does GET /api/search accept query, wing, room, max_distance, limit and return results?",
+      "expected": "Yes, test_search_returns_results, test_search_with_limit, test_search_with_wing_filter verify this",
+      "ac_ref": "AC-7"
+    },
+    {
+      "question": "Does GET /api/status return total_drawers, wings, rooms?",
+      "expected": "Yes, test_status_returns_palace_info verifies all fields; test_status_empty_palace verifies graceful handling of empty palace",
+      "ac_ref": "AC-8"
+    },
+    {
+      "question": "Does GET /api/taxonomy return nested {wing: {room: count}} structure?",
+      "expected": "Yes, test_taxonomy_returns_hierarchy verifies Web/Captures, Web/Articles, Research/Papers",
+      "ac_ref": "AC-9"
+    },
+    {
+      "question": "Does GET /api/wings return {wings: {name: count}}?",
+      "expected": "Yes, test_wings_returns_wing_counts verifies Web=2, Research=1",
+      "ac_ref": "AC-10"
+    },
+    {
+      "question": "Does GET /api/rooms accept optional wing param and return room counts?",
+      "expected": "Yes, test_rooms_returns_all_rooms and test_rooms_filters_by_wing verify both cases",
+      "ac_ref": "AC-11"
+    },
+    {
+      "question": "Does GET /api/drawers/by-url return exists/drawer_id/title when found, and {exists: false} when not?",
+      "expected": "Yes, test_by_url_found and test_by_url_not_found verify both cases; queries ChromaDB metadata directly",
+      "ac_ref": "AC-12"
+    }
+  ]
+}

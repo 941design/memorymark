@@ -1,0 +1,35 @@
+{
+  "story_id": "S2",
+  "verification_questions": [
+    {
+      "question": "Does POST /api/drawers accept {wing, room, content, metadata} and return 201 with {success, drawer_id}?",
+      "expected": "Yes, test_create_drawer_success verifies this",
+      "ac_ref": "AC-4"
+    },
+    {
+      "question": "Does POST /api/drawers store custom metadata (source_url, title, hall, timestamp) in ChromaDB?",
+      "expected": "Yes, test_create_drawer_stores_custom_metadata creates a drawer and verifies source_url and title via by-url lookup",
+      "ac_ref": "AC-4"
+    },
+    {
+      "question": "Does PUT /api/drawers/{id} update content and metadata, returning 200?",
+      "expected": "Yes, test_update_drawer_content and test_update_drawer_metadata verify both cases",
+      "ac_ref": "AC-5"
+    },
+    {
+      "question": "Does PUT /api/drawers/{id} return 404 for nonexistent drawer?",
+      "expected": "Yes, test_update_drawer_not_found verifies 404 response",
+      "ac_ref": "AC-5"
+    },
+    {
+      "question": "Does DELETE /api/drawers/{id} return 200 on success and 404 on not found?",
+      "expected": "Yes, test_delete_drawer_success and test_delete_drawer_not_found verify both",
+      "ac_ref": "AC-6"
+    },
+    {
+      "question": "Are Pydantic models used for request/response validation?",
+      "expected": "Yes, CreateDrawerRequest, UpdateDrawerRequest, DrawerMetadata models with field validation. test_create_drawer_missing_required_fields verifies 422 on invalid input.",
+      "ac_ref": "AC-4"
+    }
+  ]
+}

@@ -1,26 +1,33 @@
-.PHONY: up down logs build ext-chrome ext-firefox ext-all clean test
+.PHONY: up down logs build ext-chrome ext-firefox ext-all clean test dev help
+
+help: ## Show available targets
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  %-16s %s\n", $$1, $$2}'
 
 # Docker bridge management
-up:
+up: ## Start the bridge (docker compose up -d)
 	docker compose up -d memorymark-bridge
 
-down:
+down: ## Stop the bridge
 	docker compose down
 
-logs:
+logs: ## Tail bridge logs
 	docker compose logs -f memorymark-bridge
 
-build:
+build: ## Rebuild the Docker image
 	docker compose build memorymark-bridge
+
+dev: ## Run bridge locally without Docker (requires uv)
+	cd bridge && uv run uvicorn server:app --host 127.0.0.1 --port 21517 --reload
 
 # Extension packaging
 DIST_DIR := dist
 
-ext-chrome: $(DIST_DIR)/memorymark-chrome.zip
+ext-chrome: $(DIST_DIR)/memorymark-chrome.zip ## Package Chrome extension zip
 
-ext-firefox: $(DIST_DIR)/memorymark-firefox.zip
+ext-firefox: $(DIST_DIR)/memorymark-firefox.zip ## Package Firefox extension zip
 
-ext-all: ext-chrome ext-firefox
+ext-all: ext-chrome ext-firefox ## Build both extension zips
 
 $(DIST_DIR)/memorymark-chrome.zip:
 	@mkdir -p $(DIST_DIR)
@@ -40,8 +47,8 @@ $(DIST_DIR)/memorymark-firefox.zip:
 	@echo "Built $(DIST_DIR)/memorymark-firefox.zip"
 
 # Bridge tests (creates venv automatically via uv)
-test:
+test: ## Run bridge test suite (44 tests)
 	cd bridge && uv run pytest -v
 
-clean:
+clean: ## Remove build artifacts
 	rm -rf $(DIST_DIR)

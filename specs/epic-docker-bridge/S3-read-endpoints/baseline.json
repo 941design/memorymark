@@ -1,0 +1,24 @@
+{
+  "story_id": "S3",
+  "story_name": "read-endpoints",
+  "timestamp": "2026-04-13T00:00:00Z",
+  "test_command": "cd bridge && .venv/bin/python -m pytest test_read_endpoints.py -v",
+  "tests_passing": 13,
+  "tests_failing": 0,
+  "test_names": [
+    "test_search_returns_results",
+    "test_search_with_limit",
+    "test_search_with_wing_filter",
+    "test_search_requires_query",
+    "test_status_returns_palace_info",
+    "test_status_empty_palace",
+    "test_taxonomy_returns_hierarchy",
+    "test_wings_returns_wing_counts",
+    "test_rooms_returns_all_rooms",
+    "test_rooms_filters_by_wing",
+    "test_by_url_found",
+    "test_by_url_not_found",
+    "test_by_url_requires_url_param"
+  ],
+  "s1_s2_regression": "all 16 prior tests in test_server.py + test_write_endpoints.py still pass"
+}

@@ -1,0 +1,18 @@
+{
+  "story_id": "S1",
+  "story_name": "scaffold-and-health",
+  "status": "done",
+  "timestamp": "2026-04-13T00:00:00Z",
+  "files_created": [
+    "bridge/server.py",
+    "bridge/requirements.txt",
+    "bridge/Dockerfile",
+    "bridge/conftest.py",
+    "bridge/test_server.py",
+    "docker-compose.yml"
+  ],
+  "tests_passing": 5,
+  "tests_failing": 0,
+  "acceptance_criteria_met": ["AC-1", "AC-2", "AC-3"],
+  "notes": "Health endpoint calls tool_status() for drawer count. CORS uses allow_origin_regex to match chrome-extension:// and moz-extension:// origins. Tests use isolated temp palace via monkeypatch."
+}

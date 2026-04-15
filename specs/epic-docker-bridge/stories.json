@@ -1,0 +1,45 @@
+{
+  "epic_name": "docker-bridge",
+  "stories": [
+    {
+      "id": "S1",
+      "name": "scaffold-and-health",
+      "title": "Project scaffold, CORS, and health endpoint",
+      "status": "pending",
+      "story_order": 1,
+      "acceptance_criteria": ["AC-1", "AC-2", "AC-3"],
+      "description": "Create bridge/server.py with FastAPI app, CORS middleware (chrome-extension://* and moz-extension://*), GET /api/health endpoint. Create bridge/requirements.txt (mempalace, fastapi, uvicorn, pytest, httpx), bridge/Dockerfile, docker-compose.yml. Set up pytest with FastAPI TestClient for testing. The health endpoint calls tool_status() to get drawer count.",
+      "scope": {
+        "in": ["bridge/server.py (app + health)", "bridge/requirements.txt", "bridge/Dockerfile", "docker-compose.yml", "bridge/conftest.py (TestClient fixture)", "bridge/test_server.py"],
+        "out": ["All other endpoints"]
+      }
+    },
+    {
+      "id": "S2",
+      "name": "write-endpoints",
+      "title": "Drawer CRUD endpoints (POST, PUT, DELETE)",
+      "status": "pending",
+      "story_order": 2,
+      "acceptance_criteria": ["AC-4", "AC-5", "AC-6"],
+      "description": "Implement POST /api/drawers (create drawer with custom metadata stored in ChromaDB), PUT /api/drawers/{id} (update content/metadata), DELETE /api/drawers/{id}. For POST, access ChromaDB collection directly to store extended metadata (source_url, title, hall, timestamp) alongside standard MemPalace fields. Use tool_update_drawer and tool_delete_drawer for PUT/DELETE. Add Pydantic models for request/response validation. Tests for each endpoint including error cases.",
+      "scope": {
+        "in": ["POST /api/drawers", "PUT /api/drawers/{id}", "DELETE /api/drawers/{id}", "Pydantic models", "Tests"],
+        "out": ["Read endpoints", "by-url lookup"]
+      }
+    },
+    {
+      "id": "S3",
+      "name": "read-endpoints",
+      "title": "Read endpoints and by-url duplicate detection",
+      "status": "pending",
+      "story_order": 3,
+      "acceptance_criteria": ["AC-7", "AC-8", "AC-9", "AC-10", "AC-11", "AC-12"],
+      "description": "Implement GET /api/search (wraps tool_search), GET /api/status (wraps tool_status), GET /api/taxonomy (wraps tool_get_taxonomy), GET /api/wings (wraps tool_list_wings), GET /api/rooms (wraps tool_list_rooms with optional wing param), GET /api/drawers/by-url (query ChromaDB metadata for source_url match, return exists/drawer_id/title). Tests for each endpoint. The by-url endpoint requires direct ChromaDB collection access to query by metadata field.",
+      "scope": {
+        "in": ["GET /api/search", "GET /api/status", "GET /api/taxonomy", "GET /api/wings", "GET /api/rooms", "GET /api/drawers/by-url", "Tests"],
+        "out": ["Write endpoints (already done in S2)"]
+      }
+    }
+  ],
+  "story_order": ["S1", "S2", "S3"]
+}

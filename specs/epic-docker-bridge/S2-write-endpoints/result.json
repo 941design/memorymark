@@ -1,0 +1,16 @@
+{
+  "story_id": "S2",
+  "story_name": "write-endpoints",
+  "status": "done",
+  "timestamp": "2026-04-13T00:00:00Z",
+  "files_modified": [
+    "bridge/server.py"
+  ],
+  "files_created": [
+    "bridge/test_write_endpoints.py"
+  ],
+  "tests_passing": 11,
+  "tests_failing": 0,
+  "acceptance_criteria_met": ["AC-4", "AC-5", "AC-6"],
+  "notes": "POST /api/drawers uses tool_add_drawer then updates ChromaDB metadata directly for custom fields (source_url, title, hall, timestamp). PUT uses tool_update_drawer for content/wing/room, then updates custom metadata in ChromaDB. DELETE uses tool_delete_drawer. _is_not_found() helper maps both 'not found' and 'no palace' errors to 404."
+}

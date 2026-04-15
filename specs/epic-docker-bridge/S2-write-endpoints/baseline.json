@@ -1,0 +1,22 @@
+{
+  "story_id": "S2",
+  "story_name": "write-endpoints",
+  "timestamp": "2026-04-13T00:00:00Z",
+  "test_command": "cd bridge && .venv/bin/python -m pytest test_write_endpoints.py -v",
+  "tests_passing": 11,
+  "tests_failing": 0,
+  "test_names": [
+    "test_create_drawer_success",
+    "test_create_drawer_stores_custom_metadata",
+    "test_create_drawer_increments_health_count",
+    "test_create_drawer_without_metadata",
+    "test_create_drawer_idempotent",
+    "test_create_drawer_missing_required_fields",
+    "test_update_drawer_content",
+    "test_update_drawer_metadata",
+    "test_update_drawer_not_found",
+    "test_delete_drawer_success",
+    "test_delete_drawer_not_found"
+  ],
+  "s1_regression": "all 5 S1 tests in test_server.py still pass"
+}

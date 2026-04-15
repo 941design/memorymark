@@ -1,0 +1,66 @@
+{
+  "timestamp": "2026-04-13T00:00:00Z",
+  "project_language": "python",
+  "mempalace_version": "3.2.0",
+  "api_surface": {
+    "tool_add_drawer": {
+      "signature": "tool_add_drawer(wing: str, room: str, content: str, source_file: str = None, added_by: str = 'mcp')",
+      "returns": "{success: bool, drawer_id: str, wing: str, room: str} or {success: false, error: str}",
+      "notes": "Generates deterministic ID from sha256(wing+room+content). Has built-in duplicate detection via ID collision. Metadata stored: wing, room, source_file, chunk_index, added_by, filed_at. Does NOT accept arbitrary metadata dict — use source_file for source_url, and store title/hall/timestamp by extending metadata in our bridge layer."
+    },
+    "tool_update_drawer": {
+      "signature": "tool_update_drawer(drawer_id: str, content: str = None, wing: str = None, room: str = None)",
+      "returns": "{success: bool, drawer_id: str}",
+      "notes": "Updates content and/or wing/room. No arbitrary metadata update."
+    },
+    "tool_delete_drawer": {
+      "signature": "tool_delete_drawer(drawer_id: str)",
+      "returns": "{success: bool, drawer_id: str}"
+    },
+    "tool_search": {
+      "signature": "tool_search(query: str, limit: int = 5, wing: str = None, room: str = None, max_distance: float = 1.5, min_similarity: float = None, context: str = None)",
+      "returns": "{query, filters, total_before_filter, results: [{text, wing, room, source_file, similarity, distance}]}"
+    },
+    "tool_status": {
+      "signature": "tool_status()",
+      "returns": "{total_drawers, wings: {name: count}, rooms: {name: count}, palace_path, protocol, aaak_dialect}"
+    },
+    "tool_get_taxonomy": {
+      "signature": "tool_get_taxonomy()",
+      "returns": "{taxonomy: {wing: {room: count}}}"
+    },
+    "tool_list_wings": {
+      "signature": "tool_list_wings()",
+      "returns": "{wings: {name: count}}"
+    },
+    "tool_list_rooms": {
+      "signature": "tool_list_rooms(wing: str = None)",
+      "returns": "{wing, rooms: {name: count}}"
+    },
+    "tool_get_drawer": {
+      "signature": "tool_get_drawer(drawer_id: str)",
+      "returns": "{drawer_id, content, wing, room, source_file, ...metadata}"
+    },
+    "tool_list_drawers": {
+      "signature": "tool_list_drawers(wing: str = None, room: str = None, limit: int = 20, offset: int = 0)",
+      "returns": "{drawers: [{id, wing, room, source_file, added_by, filed_at, preview}], total, offset, limit}"
+    }
+  },
+  "internals": {
+    "collection_access": "_get_collection(create=False) returns ChromaDB collection",
+    "config": "MempalaceConfig() reads from ~/.mempalace config, palace_path defaults to ~/.mempalace/palace",
+    "metadata_in_chromadb": "Each drawer stored with metadatas dict: {wing, room, source_file, chunk_index, added_by, filed_at}",
+    "dedup": "tool_add_drawer uses deterministic ID (sha256 of wing+room+content) for idempotency"
+  },
+  "bridge_design_decisions": {
+    "metadata_gap": "Spec wants source_url, title, hall, timestamp in metadata. MemPalace tool_add_drawer only stores source_file, added_by, filed_at. Bridge must either: (a) use source_file for source_url and embed title/hall/timestamp in content header, or (b) directly access ChromaDB collection to store custom metadata fields. Option (b) is cleaner for by-url lookup.",
+    "by_url_lookup": "No native MemPalace function for URL lookup. Must use ChromaDB collection.get(where={'source_url': url}) directly, or iterate tool_list_drawers. Direct collection access is better.",
+    "approach": "Use tool_* functions for standard operations, but access ChromaDB collection directly for custom metadata storage and by-url lookup. This keeps us aligned with MemPalace patterns while supporting the spec's requirements."
+  },
+  "existing_project_files": {
+    "docs/": ["blueprint-deepagentjs.md", "blueprint-gemma-model.md", "browser-extension-patterns.md"],
+    "specs/": ["sorted-imagining-journal.md", "feature-01 through feature-10 specs"],
+    "no_existing_code": true,
+    "no_test_infrastructure": true
+  }
+}

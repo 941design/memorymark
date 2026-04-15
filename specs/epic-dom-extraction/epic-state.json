@@ -1,0 +1,14 @@
+{
+  "epic_name": "dom-extraction",
+  "status": "done",
+  "phase": "COMPLETE",
+  "created_at": "2026-04-13T00:10:00Z",
+  "updated_at": "2026-04-13T00:12:00Z",
+  "completed_stories": ["S1"],
+  "escalated_stories": [],
+  "phase_history": [
+    {"phase": "SPEC_VALIDATED", "timestamp": "2026-04-13T00:10:00Z", "trigger": "validation_passed"},
+    {"phase": "IMPLEMENTATION", "timestamp": "2026-04-13T00:11:00Z", "trigger": "direct_implementation"},
+    {"phase": "COMPLETE", "timestamp": "2026-04-13T00:12:00Z", "trigger": "implemented_and_reviewed"}
+  ]
+}

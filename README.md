@@ -112,11 +112,13 @@ memorymark/
 | `make down` | Stop the bridge |
 | `make logs` | Tail bridge logs |
 | `make build` | Rebuild the Docker image |
-| `make test` | Run bridge test suite (33 tests) |
+| `make dev` | Run bridge locally without Docker (requires uv) |
+| `make test` | Run bridge test suite (44 tests) |
 | `make ext-chrome` | Package Chrome extension zip |
 | `make ext-firefox` | Package Firefox extension zip |
 | `make ext-all` | Build both extension zips |
 | `make clean` | Remove build artifacts |
+| `make help` | Show all available targets |
 
 ## Bridge API
 

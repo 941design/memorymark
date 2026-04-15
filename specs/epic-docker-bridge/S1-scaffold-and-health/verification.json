@@ -1,0 +1,35 @@
+{
+  "story_id": "S1",
+  "verification_questions": [
+    {
+      "question": "Does bridge/server.py contain a FastAPI application instance?",
+      "expected": "Yes, `app = FastAPI(title='MemoryMark Bridge', version='0.1.0')`",
+      "ac_ref": "AC-1"
+    },
+    {
+      "question": "Does GET /api/health return {status: 'ok', drawers: <int>} with HTTP 200?",
+      "expected": "Yes, health() calls tool_status() and returns the drawer count",
+      "ac_ref": "AC-2"
+    },
+    {
+      "question": "Does CORS middleware allow chrome-extension:// and moz-extension:// origins?",
+      "expected": "Yes, via allow_origin_regex matching both patterns",
+      "ac_ref": "AC-3"
+    },
+    {
+      "question": "Does CORS reject non-extension origins?",
+      "expected": "Yes, test_cors_rejects_random_origin verifies no CORS header for https://evil.com",
+      "ac_ref": "AC-3"
+    },
+    {
+      "question": "Does bridge/requirements.txt list all required dependencies?",
+      "expected": "Yes: mempalace, fastapi, uvicorn, pytest, httpx",
+      "ac_ref": "AC-1"
+    },
+    {
+      "question": "Do Dockerfile and docker-compose.yml match the spec?",
+      "expected": "Yes: python:3.11-slim base, port 21517, mempalace-data volume, MEMORYMARK_PORT env var",
+      "ac_ref": "AC-1"
+    }
+  ]
+}

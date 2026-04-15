@@ -1,0 +1,16 @@
+{
+  "story_id": "S3",
+  "story_name": "read-endpoints",
+  "status": "done",
+  "timestamp": "2026-04-13T00:00:00Z",
+  "files_modified": [
+    "bridge/server.py"
+  ],
+  "files_created": [
+    "bridge/test_read_endpoints.py"
+  ],
+  "tests_passing": 13,
+  "tests_failing": 0,
+  "acceptance_criteria_met": ["AC-7", "AC-8", "AC-9", "AC-10", "AC-11", "AC-12"],
+  "notes": "All read endpoints wrap MemPalace tool_* functions. Empty palace (no ChromaDB collection) returns graceful defaults (0 drawers, empty dicts). by-url endpoint queries ChromaDB collection directly via col.get(where={'source_url': url}). Search supports wing, room, max_distance, limit filtering."
+}
