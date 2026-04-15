@@ -1,0 +1,9 @@
+{
+  "captured_at": "2026-04-15T13:00:00Z",
+  "command": "cd bridge && uv run pytest -v",
+  "passed": 65,
+  "failed": 0,
+  "errors": 0,
+  "failures": [],
+  "baseline_clean": true
+}

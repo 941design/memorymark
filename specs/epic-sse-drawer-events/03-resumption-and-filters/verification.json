@@ -1,0 +1,77 @@
+{
+  "story_id": "03",
+  "story_name": "resumption-and-filters",
+  "verified_at": "2026-04-15T14:00:00Z",
+  "verification_questions": [
+    {
+      "id": "VQ-03-001",
+      "question": "Does GET /api/events accept a Last-Event-ID header and replay WAL events with id > N?",
+      "answer": "Yes. The get_events handler reads request.headers.get('last-event-id'), parses it as int, calls replay_from_id(last_id) in asyncio.to_thread, then yields each matching event before entering the live queue loop.",
+      "ac": "AC-007",
+      "evidence": "bridge/server.py:get_events; test_replay_from_id_via_last_event_id_header PASSED"
+    },
+    {
+      "id": "VQ-03-002",
+      "question": "Is replay served from the ring buffer when last_id falls within the last 1024 events?",
+      "answer": "Yes. replay_from_id checks if buf[0].id <= last_id + 1; if so, it filters the in-memory deque without touching the WAL file.",
+      "ac": "AC-008",
+      "evidence": "bridge/events.py:replay_from_id; test_replay_served_from_ring_buffer_when_within_window PASSED"
+    },
+    {
+      "id": "VQ-03-003",
+      "question": "Does replay fall back to a single WAL scan when last_id predates the ring buffer?",
+      "answer": "Yes. When buf is empty or buf[0].id > last_id + 1, replay_from_id delegates to _scan_wal_by_id which performs exactly one sequential scan from byte 0. No second scan is performed.",
+      "ac": "AC-008/AC-020",
+      "evidence": "bridge/events.py:_scan_wal_by_id; test_replay_falls_back_to_wal_for_old_id PASSED"
+    },
+    {
+      "id": "VQ-03-004",
+      "question": "Does ?since_timestamp= replay events with timestamp >= the given ISO-8601 value?",
+      "answer": "Yes. replay_from_timestamp uses lexicographic >= on ISO-8601 timestamp strings; when buf[0].timestamp >= since_ts it serves from the ring buffer.",
+      "ac": "AC-009",
+      "evidence": "bridge/events.py:replay_from_timestamp; test_replay_from_timestamp PASSED"
+    },
+    {
+      "id": "VQ-03-005",
+      "question": "Does ?ops=<csv> filter events to only the specified operation types?",
+      "answer": "Yes. ops_filter is built as a set by splitting the ?ops= CSV, and _matches_ops() is applied to both replayed and live events. Events whose 'event' field is not in ops_filter are skipped.",
+      "ac": "AC-010",
+      "evidence": "bridge/server.py:get_events; test_ops_filter_excludes_unmatched_operations and test_ops_filter_allows_multiple_operations PASSED"
+    },
+    {
+      "id": "VQ-03-006",
+      "question": "Are multiple ops values (comma-separated) supported?",
+      "answer": "Yes. ops.split(',') splits on commas, each token is stripped, and all are added to the ops_filter set.",
+      "ac": "AC-010",
+      "evidence": "bridge/server.py:get_events; test_ops_filter_allows_multiple_operations PASSED"
+    },
+    {
+      "id": "VQ-03-007",
+      "question": "Is a synthetic 'overrun' frame emitted when a queue drops the oldest entry on overflow?",
+      "answer": "Yes. _put_to_queue drops the oldest item when full, then puts an overrun frame {'event': 'overrun', 'data': {}}, then attempts to put the new event.",
+      "ac": "AC-015/AC-020",
+      "evidence": "bridge/events.py:_put_to_queue; test_overrun_frame_emitted_on_queue_overflow PASSED"
+    },
+    {
+      "id": "VQ-03-008",
+      "question": "Is exactly one WAL scan performed (no second scan)?",
+      "answer": "Yes. Both _scan_wal_by_id and _scan_wal_by_timestamp open the file once and read sequentially in a single pass, returning results immediately without re-opening.",
+      "ac": "AC-020",
+      "evidence": "bridge/events.py:_scan_wal_by_id, _scan_wal_by_timestamp"
+    },
+    {
+      "id": "VQ-03-009",
+      "question": "Do all 28 tests pass with zero failures after story 03 changes?",
+      "answer": "Yes. Full suite: 28 passed, 0 failed.",
+      "ac": "baseline-regression",
+      "evidence": "uv run pytest -v; 28 passed"
+    },
+    {
+      "id": "VQ-03-010",
+      "question": "Are replay and live filter phases both applied (filter works on replayed AND new events)?",
+      "answer": "Yes. _matches_ops is called both in the replay loop (for each replayed event) and in the live streaming loop (for each queue-dequeued event), using the same ops_filter set.",
+      "ac": "AC-010",
+      "evidence": "bridge/server.py:get_events _generate inner function"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "epic_name": "sse-drawer-events-p1",
+  "status": "done",
+  "phase": "COMPLETE",
+  "created_at": "2026-04-15T12:00:00Z",
+  "updated_at": "2026-04-15T12:52:47Z",
+  "completed_stories": ["01", "02"],
+  "escalated_stories": [],
+  "parent_epic": "sse-drawer-events",
+  "origin": "codex adversarial-review — see review.md",
+  "adversarial_review_verdict": "approve",
+  "phase_history": [
+    {"phase": "SPEC_VALIDATED", "timestamp": "2026-04-15T12:00:00Z", "trigger": "review_findings_accepted_by_user"},
+    {"phase": "PLANNING_DONE", "timestamp": "2026-04-15T12:44:10Z", "trigger": "planner_delivered"},
+    {"phase": "IMPLEMENTATION", "timestamp": "2026-04-15T12:45:07Z", "trigger": "stories_assigned"},
+    {"phase": "STORY_01_DONE", "timestamp": "2026-04-15T12:49:50Z", "trigger": "verifier_accepted"},
+    {"phase": "STORY_02_DONE", "timestamp": "2026-04-15T12:52:47Z", "trigger": "verifier_accepted"},
+    {"phase": "COMPLETE", "timestamp": "2026-04-15T12:52:47Z", "trigger": "adversarial_review_approve"}
+  ],
+  "final_test_counts": {
+    "command": "cd bridge && uv run pytest -v",
+    "passed": 75,
+    "failed": 0,
+    "baseline_before_p1": 72,
+    "new_tests_added": 3
+  }
+}

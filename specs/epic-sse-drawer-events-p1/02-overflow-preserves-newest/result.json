@@ -1,0 +1,25 @@
+{
+  "story": "02-overflow-preserves-newest",
+  "timestamp": "2026-04-15T12:50:00Z",
+  "status": "done",
+  "final_outcome": "accepted",
+  "completed_at": "2026-04-15T15:50:00Z",
+  "verification_rounds": 1,
+  "adversarial_review_verdict": "approve",
+  "adversarial_review_findings": "Original HIGH finding (WAL truncation reuses event IDs): RESOLVED—_global_seq is monotonic, never resets on truncation; event['id'] sources from _global_seq; replay_from_id emits cursor-stale when cursor predates ring buffer. Original MEDIUM finding (queue overflow drops triggering event): RESOLVED—_put_to_queue drops 2 oldest before overflow, enqueues overrun then item with no try/except. No HIGH or MEDIUM severity regressions introduced.",
+  "files_modified": [
+    "bridge/events.py",
+    "bridge/test_events.py"
+  ],
+  "changes_summary": [
+    "_put_to_queue now drops 2 oldest entries (via loop with QueueEmpty guard) before inserting overrun frame then triggering event",
+    "Removed try/except around final put_nowait calls — triggering event no longer silently discarded",
+    "Added test_overflow_preserves_newest_event asserting new_event is last and overrun is second-to-last (AC-P08)"
+  ],
+  "test_counts": {
+    "baseline": 74,
+    "final": 75,
+    "new_tests": 1,
+    "failed": 0
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "story": "02-overflow-preserves-newest",
+  "timestamp": "2026-04-15T12:50:00Z",
+  "questions": [
+    {
+      "id": "V01",
+      "ac": "AC-P07",
+      "question": "Does _put_to_queue drop exactly two oldest entries when full before inserting the overrun frame and triggering event?",
+      "answer": "Yes. The new implementation loops `for _ in range(2): q.get_nowait()` then calls `q.put_nowait(overrun)` then `q.put_nowait(item)` — with no try/except swallowing failures on the final inserts.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V02",
+      "ac": "AC-P07 ordering",
+      "question": "Is the overrun frame placed immediately before the triggering event in the queue?",
+      "answer": "Yes. `q.put_nowait(overrun)` runs before `q.put_nowait(item)`, so draining the queue always yields [..., overrun, item] at the tail.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V03",
+      "ac": "AC-P08",
+      "question": "Does test_overflow_preserves_newest_event assert that new_event is last and overrun is second-to-last?",
+      "answer": "Yes. `assert items[-1] is new_event` and `assert items[-2].get('event') == 'overrun'` — both checked against the drained list.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V04",
+      "ac": "AC-P10",
+      "question": "Do all 74 pre-existing tests still pass after this change?",
+      "answer": "Yes. Full suite runs 75 tests (74 from story 01 + 1 new) — all pass. test_broadcast_overrun_drops_oldest_and_inserts_overrun_frame still passes because it only requires at least one overrun frame, which the new code still produces.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V05",
+      "ac": "AC-P07 edge case",
+      "question": "What happens if the queue has only 1 item when overflow is triggered?",
+      "answer": "The `for _ in range(2)` loop catches QueueEmpty on the second iteration and breaks. Then overrun and item are both enqueued — queue ends up with 2 items. No exception is raised.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V06",
+      "ac": "correctness — no silent discard",
+      "question": "Is there any remaining path in _put_to_queue where the triggering event could be silently discarded?",
+      "answer": "No. The final `q.put_nowait(item)` has no try/except. If after dropping 2 items the queue is somehow still full (only possible if maxsize <= 2), it will raise QueueFull rather than silently drop — a fail-loud behavior. For normal maxsize=256 this cannot happen.",
+      "verdict": "pass"
+    }
+  ],
+  "overall_verdict": "pass"
+}

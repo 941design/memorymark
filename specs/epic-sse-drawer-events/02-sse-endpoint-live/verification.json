@@ -1,0 +1,71 @@
+{
+  "story_id": "02",
+  "verification_questions": [
+    {
+      "id": "VQ-02-001",
+      "question": "Does AC-003 hold? Does GET /api/events return HTTP 200 with Content-Type text/event-stream?",
+      "answer": "Yes. `get_events()` in server.py:414 returns `StreamingResponse(_generate(), media_type='text/event-stream')`. Verified by `test_sse_endpoint_returns_200_text_event_stream` which asserts `resp.status_code == 200` and `text/event-stream` in content-type header.",
+      "ac": "AC-003",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-02-002",
+      "question": "Does AC-004 hold? Does each emitted frame contain id:, event:, data: on consecutive lines followed by a blank line?",
+      "answer": "Yes. The generator yields `f'id: {event_id}\\nevent: {event[\"event\"]}\\ndata: {json.dumps(event.get(\"data\", {}))}\\n\\n'` (server.py:434-439). Verified by `test_sse_frame_structure` which locates the id: line and checks the next two lines are event: and data:, and `test_sse_frame_id_is_numeric` which confirms the id value is a positive integer.",
+      "ac": "AC-004",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-02-003",
+      "question": "Does AC-005 hold? Does data: JSON contain timestamp, operation, and params keys?",
+      "answer": "Yes. The event dict built in `_wal_tailer()` (events.py:91-99) always includes timestamp, operation, and params from the WAL entry. The broadcast event dict has `data: {timestamp, operation, params}`. Verified by `test_sse_data_contains_required_keys`.",
+      "ac": "AC-005",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-02-004",
+      "question": "Does AC-012 hold? Is a `: keepalive` comment sent at least once every 15 seconds when no event is emitted?",
+      "answer": "Yes. The generator accumulates `idle_seconds` via `_SSE_POLL_TIMEOUT` increments and yields `: keepalive\\n\\n` when `idle_seconds >= _SSE_HEARTBEAT_INTERVAL` (server.py:428-431). Default `_SSE_HEARTBEAT_INTERVAL=15.0`. Verified by `test_sse_heartbeat_emitted` (with interval patched to 0.4s for speed).",
+      "ac": "AC-012",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-02-005",
+      "question": "Does AC-013 hold? Is the subscriber queue removed from the registry on disconnect?",
+      "answer": "Yes. The generator's `finally: unsubscribe(q)` block (server.py:440-441) runs when the generator is garbage collected or when the streaming response ends. Verified by `test_sse_subscriber_cleaned_up_on_disconnect` which checks `ev._subscribers` count after the stream closes.",
+      "ac": "AC-013",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-02-006",
+      "question": "Does AC-011 hold? Without ?ops= parameter, all operations are emitted?",
+      "answer": "Yes. The story 02 endpoint has no filtering logic (filtering is story 03). All events from `ev.broadcast()` are yielded. Verified by `test_sse_all_operations_emitted_when_no_filter` which broadcasts add_drawer and update_drawer and confirms both appear.",
+      "ac": "AC-011",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-02-007",
+      "question": "Is `sse_starlette` introduced? Are runtime dependencies added to pyproject.toml?",
+      "answer": "No. `server.py` uses `from fastapi.responses import StreamingResponse` (already part of fastapi). `pyproject.toml` is unchanged. No new runtime deps added.",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-02-008",
+      "question": "Does the TestClient limitation require a workaround? Is the workaround appropriate?",
+      "answer": "Yes. Starlette's TestClient buffers the entire ASGI response via `portal.call()` before returning, making true SSE streaming impossible with TestClient. The SSE endpoint tests use uvicorn in a background thread (`_live_server()` context manager in test_events.py) with httpx for real HTTP streaming. This is a standard approach for testing streaming endpoints.",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-02-009",
+      "question": "Does `broadcast()` from a background thread correctly wake up async queue getters in the server event loop?",
+      "answer": "Yes. `broadcast()` in events.py detects when called from a non-event-loop thread (`asyncio.get_running_loop()` raises RuntimeError), then uses `loop.call_soon_threadsafe(_put_to_queue, q, event)` to schedule the put on the server's event loop. The server event loop is stored in `ev._event_loop` during `start_tailer()`.",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-02-010",
+      "question": "Are all 65 tests passing with no regressions?",
+      "answer": "Yes. Full suite: 65 passed, 0 failed. 14 story 01 tests + 7 story 02 tests + 44 pre-existing tests.",
+      "status": "pass"
+    }
+  ]
+}

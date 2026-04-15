@@ -1,0 +1,39 @@
+{
+  "story_id": "01",
+  "story_name": "wal-tailer-and-broadcaster",
+  "completed_at": "2026-04-15T10:30:00Z",
+  "files_created": [
+    "bridge/events.py",
+    "bridge/test_events.py"
+  ],
+  "files_modified": [
+    "bridge/server.py"
+  ],
+  "test_counts": {
+    "new_tests": 14,
+    "pre_existing_tests": 44,
+    "total_passing": 58,
+    "total_failing": 0
+  },
+  "acceptance_criteria_covered": [
+    "AC-001",
+    "AC-002",
+    "AC-006",
+    "AC-014",
+    "AC-015",
+    "AC-016",
+    "AC-019"
+  ],
+  "decisions": [
+    "WAL path read via `str(_mp._WAL_FILE)` inside the tailer loop body on every iteration — not captured at import time",
+    "Polling interval 100ms via asyncio.sleep; asyncio.to_thread used for all file I/O",
+    "Overrun frame: drop oldest with get_nowait(), insert synthetic {event: overrun, data: {}}, then new event",
+    "Tests use synchronous _run() helper with asyncio.get_event_loop().run_until_complete() to stay consistent with existing sync test convention",
+    "No new runtime dependencies added"
+  ],
+  "caveats": [
+    "One DeprecationWarning: 'There is no current event loop' in test_tailer_task_lifecycle — harmless under Python 3.12 (loop is created implicitly), does not affect test outcomes"
+  ],
+  "verification_rounds": 1,
+  "final_outcome": "accepted"
+}

@@ -1,0 +1,56 @@
+{
+  "story": "01-monotonic-cursor",
+  "timestamp": "2026-04-15T12:30:00Z",
+  "questions": [
+    {
+      "id": "V01",
+      "ac": "AC-P01",
+      "question": "Is _global_seq declared as a module-level integer initialized to 0 in bridge/events.py?",
+      "answer": "Yes. Line 22: `_global_seq: int = 0` is declared at module level alongside other module globals.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V02",
+      "ac": "AC-P02 + AC-P03",
+      "question": "Does _wal_tailer increment _global_seq before emitting each event, and does it skip resetting _global_seq in the truncation branch?",
+      "answer": "Yes. In the truncation branch only `file_pos = 0` and `line_number = 0` are reset; `_global_seq` is left unchanged. Inside the per-line loop `_global_seq += 1` happens before constructing the event dict with `'id': _global_seq`.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V03",
+      "ac": "AC-P04 + AC-P05 + AC-P11",
+      "question": "Does replay_from_id use _global_seq-sourced ids, emit cursor-stale when cursor predates ring buffer, and is _scan_wal_by_id removed?",
+      "answer": "Yes. replay_from_id filters `e.get('id', 0) > last_id` using the stored id (which comes from _global_seq). When `last_id < oldest_id - 1` it returns a synthetic cursor-stale frame with `min_id`. _scan_wal_by_id has been fully deleted from events.py.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V04",
+      "ac": "AC-P06 + AC-P09",
+      "question": "Do the regression tests pass — truncation recovery asserts id > pre_trunc_id, and test_tailer_handles_wal_truncation no longer asserts == 1?",
+      "answer": "Yes. test_tailer_handles_wal_truncation now asserts `second['id'] > first['id']` and `second['id'] >= 2`. test_truncation_recovery_ids_strictly_increasing and test_truncation_recovery_replay_from_id_non_empty are both passing.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V05",
+      "ac": "AC-P10",
+      "question": "Do all 72 pre-existing tests still pass (accounting for authorized changes)?",
+      "answer": "Yes. Full suite runs 74 tests (72 original minus 1 renamed + 2 new + 1 replaced = net +2). All 74 pass. The renamed test test_replay_falls_back_to_wal_for_old_id → test_replay_empty_ring_buffer_streams_live correctly replaces the WAL-fallback test with one that verifies live streaming behavior when ring buffer is empty. The only pre-existing assertion changed is test_tailer_handles_wal_truncation per AC-P09.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V06",
+      "ac": "AC-P03 correctness",
+      "question": "Is there any code path where _global_seq could be reset to 0 unexpectedly during normal tailer operation?",
+      "answer": "No. _global_seq is only reset by the clean_events_state test fixture (intentional). In production, start_tailer/stop_tailer do not touch _global_seq. The truncation branch in _wal_tailer only resets file_pos and line_number.",
+      "verdict": "pass"
+    },
+    {
+      "id": "V07",
+      "ac": "AC-P05 edge case",
+      "question": "What does replay_from_id return when the ring buffer is empty?",
+      "answer": "Returns `[]` immediately (the `if not buf: return []` guard). No cursor-stale is emitted when the buffer is empty — the client just starts receiving live events, which is correct per the spec.",
+      "verdict": "pass"
+    }
+  ],
+  "overall_verdict": "pass"
+}

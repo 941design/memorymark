@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-04-15T00:00:00Z",
+  "summary": "MemoryMark bridge is a single flat FastAPI module (bridge/server.py) under uv/Python 3.12. Single existing _lifespan hooks startup/teardown. No streaming endpoints or background tasks yet. WAL path is exposed at mempalace.mcp_server._WAL_FILE; tests monkeypatch it via autouse fixture.",
+  "key_facts": {
+    "language": "python",
+    "python_requires": ">=3.11",
+    "runtime_venv_python": "3.12",
+    "package_manager": "uv (mandated by CLAUDE.md)",
+    "test_command": "cd bridge && uv run pytest -v",
+    "module_layout": "single flat bridge/server.py (no src/ or package split)",
+    "claude_md_rules": ["use uv as python package manager", "always use uv when running python"],
+    "bridge_pyproject": "/Users/mrother/Projects/941design/memorymark/bridge/pyproject.toml",
+    "wal_path_symbol": "mempalace.mcp_server._WAL_FILE (Path); also _WAL_DIR",
+    "wal_access_via_bridge": "server.py already imports `import mempalace.mcp_server as _mp` and reads _mp._wal_log, _mp._metadata_cache — private-attr access across module boundary is an established pattern",
+    "wal_redirect_in_tests": "bridge/conftest.py autouse fixture `isolated_palace` monkeypatches _mp._WAL_DIR and _mp._WAL_FILE to tmp_path; read at call time, not captured at import time",
+    "installed_but_undeclared": ["sse_starlette 3.3.4", "anyio 4.13.0"],
+    "no_existing_streaming": true,
+    "no_async_tests": true,
+    "no_hypothesis": true,
+    "route_handler_style": "sync def (not async); only MCP handlers and _lifespan are async",
+    "lifespan_location": "bridge/server.py:79-87"
+  },
+  "wal_format": {
+    "file_location": "~/.mempalace/wal/write_log.jsonl (monkeypatched in tests)",
+    "on_disk_format": "JSON lines, one object per line; mode 0o600; O_APPEND|O_CREAT",
+    "entry_schema": {
+      "timestamp": "ISO-8601 string (datetime.now().isoformat())",
+      "operation": "string (e.g. add_drawer, update_drawer, delete_drawer, diary_write)",
+      "params": "object (sensitive keys pre-redacted per mempalace.mcp_server._WAL_REDACT_KEYS)",
+      "result": "object or null"
+    },
+    "guarantees": "append-only, readable concurrently, no sequence IDs written, line number is a safe monotonic ID"
+  },
+  "write_paths_emitting_wal_entries": [
+    "bridge/server.py create_drawer (line 196) — REST POST /api/drawers",
+    "bridge/server.py update_drawer (line 268) — REST PUT /api/drawers/{id}",
+    "mempalace.mcp_server.tool_delete_drawer (line 577) — called by REST DELETE and MCP",
+    "mempalace.mcp_server.tool_add_drawer (line 522) — called via MCP",
+    "mempalace.mcp_server.tool_diary_write (line 841) — called via MCP"
+  ],
+  "reusable_patterns": [
+    {"pattern": "lifespan-scoped singleton with module-level global", "source": "bridge/server.py:76-87 (_mcp_session_manager)"},
+    {"pattern": "asyncio.to_thread for sync I/O from async context", "source": "bridge/server.py:53 (_mcp_call_tool)"},
+    {"pattern": "private-attr access across module boundary", "source": "bridge/server.py:18,196,212 accessing _mp._*"},
+    {"pattern": "monkeypatch WAL path in autouse fixture", "source": "bridge/conftest.py:18-19"},
+    {"pattern": "TestClient-as-context-manager to drive _lifespan", "source": "bridge/conftest.py:44-47"},
+    {"pattern": "TestClient streaming: `with client.stream('GET', url) as r: for line in r.iter_lines(): ...`", "source": "not yet used; supported by httpx"}
+  ],
+  "test_conventions": {
+    "runner": "pytest via uv",
+    "fixtures": "autouse isolated_palace (palace + WAL redirect) + client (TestClient)",
+    "async_tests": "none; use synchronous TestClient even for async routes",
+    "assertion_style": "assert resp.status_code == N; assert data['success'] is True",
+    "property_based": "not used",
+    "helper_pattern": "module-level helper functions like _create_test_drawer (not fixtures)"
+  },
+  "architecture_notes": {
+    "new_file_policy": "No precedent for second module — both inline in server.py and new bridge/events.py are acceptable. Given scope (tailer + registry + endpoint), a new bridge/events.py improves readability without violating any rule.",
+    "dependency_strategy": "sse_starlette is already installed but undeclared. Plain starlette.responses.StreamingResponse is sufficient (ships with fastapi) and avoids declaring a new dep. Prefer it for minimal footprint.",
+    "background_task": "Start the WAL tailer as asyncio.create_task inside _lifespan; store task handle in a module-level global; cancel+await on lifespan exit."
+  }
+}

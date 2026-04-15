@@ -1,0 +1,22 @@
+# Acceptance Criteria — SSE Drawer Events
+
+- **AC-001** The WAL tailer async task starts when `_lifespan` enters: `asyncio.create_task` is called and the returned task handle is stored in a module-level global before the `yield`.
+- **AC-002** The WAL tailer async task stops when `_lifespan` exits: the stored task handle is cancelled and awaited after the `yield`.
+- **AC-003** `GET /api/events` returns HTTP 200 with `Content-Type: text/event-stream`.
+- **AC-004** Each emitted SSE frame contains all three required fields on consecutive lines: `id: <line_number>`, `event: <operation>`, `data: <json_object>`, followed by a blank line.
+- **AC-005** The `data:` field value is a JSON object containing at minimum `timestamp`, `operation`, and `params` keys matching the WAL entry.
+- **AC-006** When two subscribers are connected simultaneously, both receive the same event in the order it was written to the WAL (i.e., event with lower `id:` value arrives before event with higher `id:` value at each subscriber).
+- **AC-007** When a client connects with a `Last-Event-ID: N` header, the server replays all WAL events with line number `> N` before streaming live events.
+- **AC-008** `Last-Event-ID` replay served from the ring buffer when the requested ID falls within the buffer's last 1024 events; older IDs cause the server to scan the WAL file once from the beginning.
+- **AC-009** When a client connects with `?since_timestamp=<ISO-8601>`, the server replays all WAL events whose `timestamp` field is `>=` the provided value before streaming live events.
+- **AC-010** When a client connects with `?ops=<comma-separated-operations>`, only events whose `operation` field matches one of the listed values are emitted; events with non-matching operations are silently dropped.
+- **AC-011** When no `?ops=` query parameter is provided, events for all operations are emitted (no filtering).
+- **AC-012** A `: keepalive` SSE comment line (followed by a blank line) is sent to each connected subscriber at least once every 15 seconds when no other event has been emitted.
+- **AC-013** When a subscriber disconnects (detected via `await request.is_disconnected()`), its `asyncio.Queue` is removed from the subscriber registry and the streaming generator exits cleanly.
+- **AC-014** Each subscriber queue has `maxsize=256`; when the queue is full, `put_nowait` drops the oldest entry before inserting the new one.
+- **AC-015** After dropping an oldest entry due to queue overflow, a synthetic frame with `event: overrun` and an empty or minimal `data:` payload is inserted into that subscriber's queue.
+- **AC-016** When the WAL file size is smaller than the last known read position (indicating truncation or rotation), the tailer closes the file handle and re-opens it from byte offset 0.
+- **AC-017** A WAL entry written via the REST path (`POST /api/drawers`, `PUT /api/drawers/{id}`, `DELETE /api/drawers/{id}`) produces an SSE event visible to connected subscribers.
+- **AC-018** A WAL entry written via the MCP path (`/mcp` → `tool_add_drawer`, `tool_delete_drawer`, `tool_diary_write`) produces an SSE event visible to connected subscribers.
+- **AC-019** The in-memory ring buffer holds the last 1024 broadcast events (`collections.deque(maxlen=1024)`); replay requests within that window are served from the buffer without reading the WAL file.
+- **AC-020** Replay requests for events older than the ring buffer's oldest entry cause a single sequential scan of the WAL file from the beginning; no second scan or seek is performed per request.

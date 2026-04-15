@@ -1,0 +1,10 @@
+{
+  "story": "01-monotonic-cursor",
+  "timestamp": "2026-04-15T12:00:00Z",
+  "command": "cd bridge && uv run pytest -v",
+  "tests_total": 72,
+  "tests_passed": 72,
+  "tests_failed": 0,
+  "tests_skipped": 0,
+  "status": "green"
+}

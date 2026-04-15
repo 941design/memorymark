@@ -1,0 +1,30 @@
+{
+  "story_id": "03",
+  "story_name": "resumption-and-filters",
+  "completed_at": "2026-04-15T14:05:00Z",
+  "test_run": {
+    "command": "cd bridge && uv run pytest -v",
+    "passed": 72,
+    "failed": 0,
+    "errors": 0,
+    "baseline_passed": 65,
+    "new_tests_passed": 7
+  },
+  "new_tests": [
+    "test_replay_from_id_via_last_event_id_header",
+    "test_replay_served_from_ring_buffer_when_within_window",
+    "test_replay_falls_back_to_wal_for_old_id",
+    "test_replay_from_timestamp",
+    "test_ops_filter_excludes_unmatched_operations",
+    "test_ops_filter_allows_multiple_operations",
+    "test_overrun_frame_emitted_on_queue_overflow"
+  ],
+  "files_changed": [
+    "bridge/events.py",
+    "bridge/server.py",
+    "bridge/test_events.py"
+  ],
+  "notes": "Ring-buffer replay uses buf[0].id <= last_id+1 check; WAL fallback is a single scan. Timestamp replay requires buf[0].timestamp >= since_ts for ring-buffer path; otherwise single WAL scan. ops filter applied to both replay and live phases. Overrun frame already existed from story 01.",
+  "verification_rounds": 1,
+  "final_outcome": "accepted"
+}

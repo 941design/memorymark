@@ -1,11 +1,14 @@
 import asyncio
 import hashlib
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import AsyncGenerator
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger("memorymark.bridge")
@@ -82,8 +85,11 @@ async def _lifespan(app: FastAPI):
     _mcp_session_manager = StreamableHTTPSessionManager(
         app=mcp_server, stateless=True, json_response=True
     )
+    from events import start_tailer, stop_tailer
     async with _mcp_session_manager.run():
+        await start_tailer()
         yield
+        await stop_tailer()
     _mcp_session_manager = None
 
 
@@ -395,3 +401,78 @@ def get_drawer(drawer_id: str):
         "title": meta.get("title", ""),
         "source_url": meta.get("source_url", ""),
     }
+
+
+# ---------------------------------------------------------------------------
+# S4: SSE event stream
+# ---------------------------------------------------------------------------
+
+_SSE_HEARTBEAT_INTERVAL: float = 15.0  # seconds; monkeypatch in tests
+_SSE_POLL_TIMEOUT: float = 1.0  # inner loop poll; keeps disconnect detection responsive
+
+
+@app.get("/api/events")
+async def get_events(
+    request: Request,
+    since_timestamp: str | None = Query(None),
+    ops: str | None = Query(None),
+) -> StreamingResponse:
+    from events import subscribe, unsubscribe, replay_from_id, replay_from_timestamp
+
+    last_event_id_header = request.headers.get("last-event-id")
+    ops_filter: set[str] | None = None
+    if ops:
+        ops_filter = {o.strip() for o in ops.split(",") if o.strip()}
+
+    def _matches_ops(event: dict) -> bool:
+        if ops_filter is None:
+            return True
+        return event.get("event", "") in ops_filter
+
+    def _format_event(event: dict) -> str:
+        event_id = event.get("id", "")
+        return (
+            f"id: {event_id}\n"
+            f"event: {event['event']}\n"
+            f"data: {json.dumps(event.get('data', {}))}\n\n"
+        )
+
+    async def _generate() -> AsyncGenerator[str, None]:
+        # Replay phase
+        if last_event_id_header is not None:
+            try:
+                last_id = int(last_event_id_header)
+            except (ValueError, TypeError):
+                last_id = 0
+            replay_events = await asyncio.to_thread(replay_from_id, last_id)
+            for ev in replay_events:
+                if _matches_ops(ev):
+                    yield _format_event(ev)
+        elif since_timestamp is not None:
+            replay_events = await asyncio.to_thread(replay_from_timestamp, since_timestamp)
+            for ev in replay_events:
+                if _matches_ops(ev):
+                    yield _format_event(ev)
+
+        # Live streaming phase
+        q = subscribe()
+        idle_seconds = 0.0
+        try:
+            while True:
+                if await request.is_disconnected():
+                    return
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=_SSE_POLL_TIMEOUT)
+                except asyncio.TimeoutError:
+                    idle_seconds += _SSE_POLL_TIMEOUT
+                    if idle_seconds >= _SSE_HEARTBEAT_INTERVAL:
+                        yield ": keepalive\n\n"
+                        idle_seconds = 0.0
+                    continue
+                idle_seconds = 0.0
+                if _matches_ops(event):
+                    yield _format_event(event)
+        finally:
+            unsubscribe(q)
+
+    return StreamingResponse(_generate(), media_type="text/event-stream")

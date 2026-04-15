@@ -1,0 +1,71 @@
+{
+  "epic_name": "epic-sse-drawer-events-p1",
+  "created_at": "2026-04-15T12:00:00Z",
+  "total_stories": 2,
+  "story_order": ["01", "02"],
+  "dependency_notes": "Story 01 introduces _global_seq and changes the id field on every broadcast event. Story 02 touches only _put_to_queue and its callers. The two changes are in different code paths (tailer/replay vs. queue overflow) and have no shared state, so they can be implemented independently. Story 01 is ordered first because its change to the event id field means Story 02's regression test helper (_make_broadcast_event) will need to emit plausible ids — but since Story 02 injects events directly via ev.broadcast() without going through the tailer, the ordering is a convention, not a hard dependency.",
+  "stories": [
+    {
+      "id": "01",
+      "name": "monotonic-cursor",
+      "title": "Introduce _global_seq and cursor-stale signal for WAL truncation recovery",
+      "description": "Replace the raw WAL line_number as the SSE event id with a module-level monotonic counter _global_seq that never resets on WAL truncation. Update replay_from_id to filter by this counter, emit a synthetic cursor-stale frame when the requested cursor falls outside the ring buffer window, and add a regression test that proves a reconnecting client receives post-truncation events rather than silence.",
+      "acceptance_criteria": ["AC-P01", "AC-P02", "AC-P03", "AC-P04", "AC-P05", "AC-P06", "AC-P09", "AC-P10", "AC-P11", "AC-P12"],
+      "scope": {
+        "includes": [
+          "Add _global_seq (int, module-level, starts at 0) to bridge/events.py",
+          "Increment _global_seq in _wal_tailer() on every successful broadcast",
+          "Use _global_seq as event['id'] instead of line_number",
+          "Do NOT reset _global_seq in the truncation branch of _wal_tailer()",
+          "Update replay_from_id() to use _global_seq-based ids throughout",
+          "Add cursor-stale synthetic event return path in replay_from_id()",
+          "Remove or guard _scan_wal_by_id WAL fallback (it cannot assign correct monotonic ids post-truncation)",
+          "Update test_tailer_handles_wal_truncation assertion from == 1 to > first['id']",
+          "Add truncation-recovery regression test (AC-P06)",
+          "Reset _global_seq = 0 in clean_events_state fixture"
+        ],
+        "excludes": [
+          "Persisting _global_seq across process restarts",
+          "Changing WAL on-disk format",
+          "Any change to queue overflow logic (Story 02)",
+          "Changes to mempalace package",
+          "New runtime dependencies"
+        ]
+      },
+      "complexity": "medium",
+      "mock_dependencies": [],
+      "introduces_mocks": [],
+      "test_fixtures": [],
+      "status": "done",
+      "notes": "The _scan_wal_by_id fallback path in replay_from_id must be removed or made unreachable because after an in-process truncation the WAL file has fewer lines than _global_seq, so re-scanning by line count would assign wrong ids. The spec says WAL-fallback replay across restarts is out of scope anyway, so the safe choice is to remove it and rely solely on the ring buffer. When the ring buffer cannot serve the cursor, emit cursor-stale and stream live from there. The clean_events_state fixture must also reset _global_seq = 0 so each test starts from a known sequence."
+    },
+    {
+      "id": "02",
+      "name": "overflow-preserves-newest",
+      "title": "Fix queue overflow to retain both overrun marker and the triggering event",
+      "description": "Change _put_to_queue so that on overflow it drops two oldest entries (instead of one) before enqueuing the synthetic overrun frame and the triggering event. This guarantees the newest event always reaches the subscriber's queue alongside the loss signal, eliminating the silent discard under bursty writes.",
+      "acceptance_criteria": ["AC-P07", "AC-P08", "AC-P10", "AC-P12"],
+      "scope": {
+        "includes": [
+          "Modify _put_to_queue in bridge/events.py: drop 2 oldest when full",
+          "Enqueue overrun frame then triggering item in that order",
+          "Add regression test asserting newest event is last item after overflow (AC-P08)",
+          "Update test_broadcast_overrun_drops_oldest_and_inserts_overrun_frame if its assertion changes"
+        ],
+        "excludes": [
+          "Any change to _global_seq or cursor logic (Story 01)",
+          "Persistent redelivery mechanism",
+          "Changes to mempalace package",
+          "New runtime dependencies"
+        ]
+      },
+      "complexity": "low",
+      "mock_dependencies": [],
+      "introduces_mocks": [],
+      "test_fixtures": [],
+      "status": "done",
+      "notes": "The existing test test_broadcast_overrun_drops_oldest_and_inserts_overrun_frame only asserts that at least one overrun frame is present — it does not assert on the triggering event. AC-P08 adds a stricter test that new_event is the last item. The existing test may need its comment block updated (it currently documents the old wrong behaviour where the triggering event fails to enqueue) but its assertion still passes after the fix."
+    }
+  ],
+  "seams": []
+}

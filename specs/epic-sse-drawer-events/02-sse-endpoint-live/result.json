@@ -1,0 +1,37 @@
+{
+  "story_id": "02",
+  "story_name": "sse-endpoint-live",
+  "completed_at": "2026-04-15T12:00:00Z",
+  "files_created": [],
+  "files_modified": [
+    "bridge/server.py",
+    "bridge/test_events.py"
+  ],
+  "test_counts": {
+    "new_tests": 7,
+    "pre_existing_tests": 58,
+    "total_passing": 65,
+    "total_failing": 0
+  },
+  "acceptance_criteria_covered": [
+    "AC-003",
+    "AC-004",
+    "AC-005",
+    "AC-011",
+    "AC-012",
+    "AC-013"
+  ],
+  "decisions": [
+    "Starlette TestClient buffers entire ASGI responses — cannot stream SSE. SSE tests use uvicorn in a background thread with httpx for real HTTP streaming.",
+    "asyncio.Queue.put_nowait() from a background thread needs loop.call_soon_threadsafe() to wake up async waiters. ev._event_loop stored during start_tailer() and used in broadcast().",
+    "_SSE_HEARTBEAT_INTERVAL and _SSE_POLL_TIMEOUT are module-level constants in server.py, settable by tests via srv._SSE_HEARTBEAT_INTERVAL = 0.4 before starting the server.",
+    "GET /api/events route added to server.py; uses StreamingResponse with async generator; no new imports beyond json, typing, fastapi.Request.",
+    "iter_lines() with httpx splits on newlines — frame collection logic tracks blank lines to detect complete frames (id + event + data + blank line)."
+  ],
+  "caveats": [
+    "Two websockets DeprecationWarnings from uvicorn/websockets — harmless, from third-party library deprecation, unrelated to our code.",
+    "One DeprecationWarning about 'no current event loop' in test_tailer_task_lifecycle — pre-existing from story 01, harmless under Python 3.12."
+  ],
+  "verification_rounds": 1,
+  "final_outcome": "accepted"
+}

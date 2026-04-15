@@ -1,0 +1,104 @@
+{
+  "epic_name": "epic-sse-drawer-events",
+  "created_at": "2026-04-15T00:00:00Z",
+  "total_stories": 3,
+  "story_order": ["01", "02", "03"],
+  "dependency_notes": "Story 01 delivers the broadcaster Python API with no HTTP surface; story 02 wires it to an HTTP endpoint and depends on the queue/registry from 01; story 03 adds resumption and filtering on top of the live endpoint from 02.",
+  "mock_resolution_plan": "Story 01 introduces MOCK-01-001 (stub broadcaster inject point for story 02 tests). Story 02 resolves it by importing the real broadcaster from story 01. No mocks cross the epic boundary.",
+  "seams": [
+    {
+      "data": "asyncio.Queue per subscriber + module-level subscriber registry set",
+      "source": { "story": "01", "artifact": "events.py: subscribe() / _subscribers set" },
+      "destination": { "story": "02", "artifact": "server.py: GET /api/events generator" }
+    },
+    {
+      "data": "ring buffer deque + broadcast function",
+      "source": { "story": "01", "artifact": "events.py: _ring_buffer / broadcast()" },
+      "destination": { "story": "03", "artifact": "server.py: GET /api/events replay logic" }
+    }
+  ],
+  "stories": [
+    {
+      "id": "01",
+      "name": "wal-tailer-and-broadcaster",
+      "title": "WAL Tailer and Broadcaster",
+      "description": "Delivers the core async machinery: an async WAL tailer task, a module-level subscriber registry (set of asyncio.Queue), a ring buffer (deque maxlen=1024), and a broadcast() function that fans events out to all queues. Exposes a Python API (subscribe/unsubscribe, start_tailer/stop_tailer). No HTTP endpoint. Lifespan wiring added to server.py so the tailer starts and stops with the application. Unit-tested by writing lines to a temp WAL file and asserting queues receive correctly structured events.",
+      "acceptance_criteria": ["AC-001", "AC-002", "AC-006", "AC-014", "AC-015", "AC-016", "AC-017", "AC-018", "AC-019"],
+      "scope": {
+        "includes": [
+          "bridge/events.py — new module with tailer, registry, ring buffer, broadcast()",
+          "bridge/server.py _lifespan — wired to start/stop tailer task",
+          "bridge/test_events.py — unit tests driving a temp WAL file"
+        ],
+        "excludes": [
+          "GET /api/events HTTP endpoint (story 02)",
+          "SSE framing (story 02)",
+          "Heartbeat (story 02)",
+          "Resumption / filtering (story 03)"
+        ]
+      },
+      "complexity": "high",
+      "introduces_mocks": [],
+      "test_fixtures": [
+        {
+          "fixture_id": "FIXTURE-01-001",
+          "description": "Temp WAL file path injected via monkeypatch of _mp._WAL_FILE; existing autouse isolated_palace fixture in conftest.py already provides this",
+          "interface": "_mp._WAL_FILE (Path)",
+          "reason": "WAL file lives outside the project; test must redirect to a deterministic temp path",
+          "permanent": true
+        }
+      ],
+      "status": "done",
+      "updated_at": "2026-04-15T13:02:00Z",
+      "notes": "WAL path must be read at call time (str(_mp._WAL_FILE)) not captured at import time, per existing bridge convention. Use asyncio.to_thread for file I/O inside the tailer. Poll interval ~100ms."
+    },
+    {
+      "id": "02",
+      "name": "sse-endpoint-live",
+      "title": "SSE Endpoint — Live Streaming",
+      "description": "Adds GET /api/events to server.py using starlette.responses.StreamingResponse. The generator calls subscribe() to get a queue, yields properly framed SSE lines (id:, event:, data:), sends heartbeat comments every 15s, and unsubscribes on disconnect. Tests use TestClient.stream() to open the endpoint while writing to the temp WAL, asserting correct SSE frame structure and heartbeat emission.",
+      "acceptance_criteria": ["AC-003", "AC-004", "AC-005", "AC-011", "AC-012", "AC-013"],
+      "scope": {
+        "includes": [
+          "bridge/server.py — GET /api/events route with StreamingResponse",
+          "bridge/test_events.py — streaming tests using TestClient.stream()"
+        ],
+        "excludes": [
+          "Last-Event-ID replay (story 03)",
+          "?since_timestamp= param (story 03)",
+          "?ops= filter (story 03)",
+          "event: overrun synthetic frame (story 03)"
+        ]
+      },
+      "complexity": "medium",
+      "introduces_mocks": [],
+      "test_fixtures": [],
+      "status": "done",
+      "updated_at": "2026-04-15T13:35:00Z",
+      "notes": "Use starlette.responses.StreamingResponse directly (already available via fastapi). Do not add sse_starlette to pyproject.toml. Route handler may be async to use await request.is_disconnected(). Heartbeat via asyncio.wait_for with timeout."
+    },
+    {
+      "id": "03",
+      "name": "resumption-and-filters",
+      "title": "Resumption and Filters",
+      "description": "Extends GET /api/events with replay and filtering capabilities: Last-Event-ID header replays from ring buffer (in-memory) or WAL file fallback; ?since_timestamp=<ISO-8601> replays by timestamp; ?ops=<csv> filters by operation; synthetic event: overrun frame emitted when a queue drops the oldest entry on overflow. Tests assert each replay path, filter behaviour, and the overrun event.",
+      "acceptance_criteria": ["AC-007", "AC-008", "AC-009", "AC-010", "AC-015", "AC-020"],
+      "scope": {
+        "includes": [
+          "bridge/server.py — Last-Event-ID, ?since_timestamp=, ?ops= logic in GET /api/events",
+          "bridge/test_events.py — replay tests, filter tests, overrun test"
+        ],
+        "excludes": [
+          "WAL rotation policy (mempalace does not rotate)",
+          "Persistent subscriber state across server restarts"
+        ]
+      },
+      "complexity": "medium",
+      "introduces_mocks": [],
+      "test_fixtures": [],
+      "status": "done",
+      "updated_at": "2026-04-15T14:10:00Z",
+      "notes": "Ring buffer check: if Last-Event-ID >= _ring_buffer[0].id, serve from buffer. Otherwise open _mp._WAL_FILE once and read sequentially. since_timestamp uses >= comparison on ISO-8601 string (lexicographic sort is valid for datetime.now().isoformat() output). ops filter applied after replay and during live streaming."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "story": "02-overflow-preserves-newest",
+  "timestamp": "2026-04-15T12:45:00Z",
+  "command": "cd bridge && uv run pytest -v",
+  "tests_total": 74,
+  "tests_passed": 74,
+  "tests_failed": 0,
+  "tests_skipped": 0,
+  "status": "green"
+}

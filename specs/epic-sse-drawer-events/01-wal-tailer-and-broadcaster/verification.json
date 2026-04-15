@@ -1,0 +1,70 @@
+{
+  "story_id": "01",
+  "verification_questions": [
+    {
+      "id": "VQ-01-001",
+      "question": "Does AC-001 hold? Is `asyncio.create_task` called in `_lifespan` before the `yield` and the handle stored?",
+      "answer": "Yes. `server.py` calls `await start_tailer()` (events.py:107) inside `_lifespan` before the `yield`. `start_tailer` calls `asyncio.create_task(_wal_tailer())` and stores the result in module-level `_tailer_task`. Verified by `test_tailer_task_lifecycle` and `test_lifespan_starts_and_stops_tailer`.",
+      "ac": "AC-001",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-01-002",
+      "question": "Does AC-002 hold? Is the tailer task cancelled and awaited after the `yield` in `_lifespan`?",
+      "answer": "Yes. `server.py` calls `await stop_tailer()` after the `yield`. `stop_tailer` (events.py:113) cancels `_tailer_task`, awaits it, and sets `_tailer_task = None`. `CancelledError` is caught so lifespan exits cleanly. Verified by `test_tailer_task_lifecycle`.",
+      "ac": "AC-002",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-01-003",
+      "question": "Does AC-014 hold? Is each subscriber queue created with `maxsize=256` and does overflow drop oldest then emit overrun?",
+      "answer": "Yes. `subscribe()` (events.py:22) creates `asyncio.Queue(maxsize=_QUEUE_MAXSIZE)` where `_QUEUE_MAXSIZE=256`. `broadcast()` (events.py:33) detects `q.full()`, calls `q.get_nowait()` to drop oldest, inserts an overrun frame, then inserts the new event. Verified by `test_broadcast_overrun_drops_oldest_and_inserts_overrun_frame`.",
+      "ac": "AC-014",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-01-004",
+      "question": "Does AC-016 hold? When WAL file size shrinks (truncation), does the tailer reset to offset 0?",
+      "answer": "Yes. `_wal_tailer()` (events.py:55) compares `file_size < file_pos` each poll cycle; if true, it resets `file_pos=0` and `line_number=0`, logs a warning, and resumes reading from the start. Verified by `test_tailer_handles_wal_truncation` which truncates the WAL mid-run and confirms a subsequent entry arrives with `id==1`.",
+      "ac": "AC-016",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-01-005",
+      "question": "Does AC-019 hold? Is the ring buffer a `collections.deque(maxlen=1024)` and are broadcast events pushed to it?",
+      "answer": "Yes. `_ring_buffer` (events.py:18) is `deque(maxlen=_RING_MAXSIZE)` where `_RING_MAXSIZE=1024`. `broadcast()` calls `_ring_buffer.append(event)` before fanning out to queues. Verified by `test_broadcast_pushes_to_ring_buffer` and `test_ring_buffer_maxsize`.",
+      "ac": "AC-019",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-01-006",
+      "question": "Is `_mp._WAL_FILE` read at call time (not captured at import time)?",
+      "answer": "Yes. `_wal_tailer()` reads `str(_mp._WAL_FILE)` inside the `while True` loop body on every iteration (events.py:58), not at module import or task creation time. This means the monkeypatch in `isolated_palace` is fully effective.",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-01-007",
+      "question": "Is `sse_starlette` introduced as a dependency?",
+      "answer": "No. `bridge/pyproject.toml` is unchanged. `bridge/events.py` has no import of `sse_starlette`. `starlette.responses.StreamingResponse` is reserved for story 02.",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-01-008",
+      "question": "Are existing tests still passing after story 01 changes?",
+      "answer": "Yes. Full suite: 58 passed, 0 failed. The 44 pre-existing tests all pass; 14 new tests added.",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-01-009",
+      "question": "Does the tailer use `asyncio.to_thread` for file I/O and poll at ~100ms?",
+      "answer": "Yes. `_read_lines_from` and `_get_file_size` are called via `asyncio.to_thread` in `_wal_tailer()` (events.py:66-77). Poll interval is `_POLL_INTERVAL=0.1` seconds (events.py:14), yielded via `await asyncio.sleep(_POLL_INTERVAL)` at the end of each loop iteration.",
+      "status": "pass"
+    },
+    {
+      "id": "VQ-01-010",
+      "question": "Is there dead code or parallel implementations?",
+      "answer": "No dead code. All public functions (`subscribe`, `unsubscribe`, `broadcast`, `start_tailer`, `stop_tailer`) are used by tests or `server.py`. Private helpers (`_wal_tailer`, `_get_file_size`, `_read_lines_from`) are all reachable. No duplicate implementations exist.",
+      "status": "pass"
+    }
+  ]
+}

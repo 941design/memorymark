@@ -1,0 +1,31 @@
+{
+  "story": "01-monotonic-cursor",
+  "timestamp": "2026-04-15T12:30:00Z",
+  "status": "done",
+  "final_outcome": "accepted",
+  "completed_at": "2026-04-15T15:45:00Z",
+  "verification_rounds": 1,
+  "files_modified": [
+    "bridge/events.py",
+    "bridge/test_events.py"
+  ],
+  "changes_summary": [
+    "Added module-level `_global_seq: int = 0` to events.py",
+    "_wal_tailer increments _global_seq on each broadcast; uses it as event['id'] instead of line_number",
+    "Truncation branch resets only file_pos and line_number; _global_seq unchanged",
+    "replay_from_id rewritten: ring-buffer only, cursor-stale signal when cursor predates buffer, no WAL fallback",
+    "_scan_wal_by_id deleted entirely",
+    "clean_events_state fixture now resets _global_seq = 0",
+    "test_tailer_handles_wal_truncation assertion updated: second['id'] > first['id'] (was == 1)",
+    "test_replay_falls_back_to_wal_for_old_id replaced with test_replay_empty_ring_buffer_streams_live",
+    "Added test_truncation_recovery_ids_strictly_increasing (AC-P06)",
+    "Added test_truncation_recovery_replay_from_id_non_empty (AC-P06)"
+  ],
+  "test_counts": {
+    "baseline": 72,
+    "final": 74,
+    "new_tests": 2,
+    "replaced_tests": 1,
+    "failed": 0
+  }
+}

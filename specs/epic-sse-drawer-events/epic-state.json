@@ -1,0 +1,25 @@
+{
+  "epic_name": "sse-drawer-events",
+  "status": "done",
+  "phase": "COMPLETE",
+  "created_at": "2026-04-15T00:00:00Z",
+  "updated_at": "2026-04-15T11:52:03Z",
+  "completed_stories": ["01", "02", "03"],
+  "escalated_stories": [],
+  "phase_history": [
+    {"phase": "SPEC_VALIDATED", "timestamp": "2026-04-15T00:00:00Z", "trigger": "plan_approved_by_user"},
+    {"phase": "PLANNING_DONE", "timestamp": "2026-04-15T00:00:00Z", "trigger": "planner_delivered_ac_and_stories"},
+    {"phase": "IMPLEMENTATION", "timestamp": "2026-04-15T10:59:00Z", "trigger": "stories_assigned"},
+    {"phase": "STORY_01_DONE", "timestamp": "2026-04-15T11:02:13Z", "trigger": "verifier_accepted"},
+    {"phase": "STORY_02_DONE", "timestamp": "2026-04-15T11:35:40Z", "trigger": "verifier_accepted"},
+    {"phase": "STORY_03_PENDING_VERIFICATION", "timestamp": "2026-04-15T14:05:00Z", "trigger": "architect_submitted"},
+    {"phase": "COMPLETE", "timestamp": "2026-04-15T11:52:03Z", "trigger": "all_stories_verified"}
+  ],
+  "final_test_counts": {
+    "command": "cd bridge && uv run pytest -v",
+    "passed": 72,
+    "failed": 0,
+    "baseline_before_epic": 44,
+    "new_tests_added": 28
+  }
+}
