@@ -1,0 +1,29 @@
+# Build artifacts
+dist/
+
+# Local MemPalace data (captured pages)
+data/
+
+# Python
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Claude Code local overrides
+.claude/settings.local.json
+
+# Clauded VM config (machine-specific paths)
+.clauded.yaml
+
+# Generated orchestration state
+implementation-state.json

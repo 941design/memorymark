@@ -1,0 +1,10 @@
+services:
+  memorymark-bridge:
+    build: ./bridge
+    ports:
+      - "127.0.0.1:21517:21517"
+    volumes:
+      - ./data/mempalace:/root/.mempalace/palace
+    environment:
+      - MEMORYMARK_PORT=21517
+    restart: unless-stopped

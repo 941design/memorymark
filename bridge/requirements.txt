@@ -1,0 +1,6 @@
+mempalace
+fastapi
+uvicorn
+mcp>=1.10
+pytest
+httpx

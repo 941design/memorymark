@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MemoryMark Chat</title>
+  <link rel="stylesheet" href="chat.css">
+</head>
+<body>
+  <div class="memorymark-chat-page">
+    <div class="memorymark-chat-header">
+      <span class="memorymark-chat-title">MemoryMark Chat</span>
+      <button class="memorymark-clear-btn" id="memorymark-clear-chat" title="Clear conversation">&#8634;</button>
+    </div>
+    <div class="memorymark-chat-messages" id="memorymark-chat-messages"></div>
+    <div class="memorymark-chat-input-area">
+      <input type="text" class="memorymark-chat-input"
+        id="memorymark-chat-input" placeholder="Type a message..." autofocus />
+      <button class="memorymark-chat-send" id="memorymark-chat-send">Send</button>
+    </div>
+  </div>
+  <script src="lib/marked.min.js"></script>
+  <script src="chat.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "MemoryMark",
+  "version": "0.0.1",
+  "description": "Capture web pages to MemPalace",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "memorymark@941design.com",
+      "strict_min_version": "109.0"
+    }
+  },
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["http://localhost:21517/*"],
+  "action": {
+    "default_title": "MemoryMark",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "lib/readability.min.js",
+        "lib/turndown.min.js",
+        "lib/turndown-plugin-gfm.min.js",
+        "lib/marked.min.js",
+        "content.js"
+      ],
+      "css": ["content.css"]
+    }
+  ],
+  "commands": {
+    "capture-page": {
+      "suggested_key": { "default": "Ctrl+Shift+M", "mac": "Command+Shift+M" },
+      "description": "Capture current page to MemPalace"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

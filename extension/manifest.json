@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "MemoryMark",
+  "version": "0.0.1",
+  "description": "Capture web pages to MemPalace",
+  "permissions": ["activeTab", "tabs", "storage", "offscreen", "scripting"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "host_permissions": ["http://localhost:21517/*"],
+  "action": {
+    "default_title": "MemoryMark",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "lib/readability.min.js",
+        "lib/turndown.min.js",
+        "lib/turndown-plugin-gfm.min.js",
+        "lib/marked.min.js",
+        "content.js"
+      ],
+      "css": ["content.css"]
+    }
+  ],
+  "commands": {
+    "capture-page": {
+      "suggested_key": { "default": "Ctrl+Shift+M", "mac": "Command+Shift+M" },
+      "description": "Capture current page to MemPalace"
+    },
+    "toggle-chat": {
+      "suggested_key": { "default": "Ctrl+Shift+L", "mac": "Command+Shift+L" },
+      "description": "Open or close MemoryMark chat"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}
