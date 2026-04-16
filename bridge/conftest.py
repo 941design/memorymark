@@ -33,6 +33,11 @@ def isolated_palace(tmp_path, monkeypatch):
     mcp._palace_db_inode = 0
     mcp._palace_db_mtime = 0.0
 
+    # Point KG at an isolated SQLite so tests don't share state
+    from mempalace.knowledge_graph import KnowledgeGraph
+    kg_path = os.path.join(palace_path, "knowledge_graph.sqlite3")
+    mcp._kg = KnowledgeGraph(db_path=kg_path)
+
     yield palace_path
 
     chromadb.api.client.SharedSystemClient.clear_system_cache()

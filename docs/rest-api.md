@@ -218,6 +218,92 @@ Real-time Server-Sent Events stream of palace mutations. See
 
 ---
 
+## Knowledge Graph
+
+### `GET /api/kg/query`
+
+Query the knowledge graph for an entity's relationships. Returns typed facts
+with temporal validity.
+
+| Parameter   | Type   | Required | Description                                        |
+|-------------|--------|----------|----------------------------------------------------|
+| `entity`    | string | **yes**  | Entity to query (e.g. `Alice`, `MyProject`)        |
+| `as_of`     | string | no       | Only facts valid at this date (`YYYY-MM-DD`)       |
+| `direction` | string | no       | `outgoing`, `incoming`, or `both` (default `both`) |
+
+**Response:**
+```json
+{
+  "entity": "Alice",
+  "as_of": null,
+  "facts": [
+    {
+      "direction": "outgoing",
+      "subject": "Alice",
+      "predicate": "works_at",
+      "object": "Acme",
+      "valid_from": "2025-01-01",
+      "valid_to": null,
+      "confidence": 1.0,
+      "source_closet": null,
+      "current": true
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+### `POST /api/kg/facts`
+
+Add a fact triple to the knowledge graph.
+
+**Request body:**
+
+| Field           | Type   | Required | Description                                  |
+|-----------------|--------|----------|----------------------------------------------|
+| `subject`       | string | **yes**  | The entity doing/being something             |
+| `predicate`     | string | **yes**  | Relationship type (e.g. `works_at`, `loves`) |
+| `object`        | string | **yes**  | The connected entity                         |
+| `valid_from`    | string | no       | When this became true (`YYYY-MM-DD`)         |
+| `source_closet` | string | no       | Drawer ID where this fact appears            |
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "triple_id": "t_alice_works_at_acme_a810f2b1de40",
+  "fact": "Alice \u2192 works_at \u2192 Acme"
+}
+```
+
+---
+
+### `POST /api/kg/invalidate`
+
+Mark a fact as no longer true (e.g. job ended, moved house).
+
+**Request body:**
+
+| Field       | Type   | Required | Description                                     |
+|-------------|--------|----------|-------------------------------------------------|
+| `subject`   | string | **yes**  | Entity                                          |
+| `predicate` | string | **yes**  | Relationship                                    |
+| `object`    | string | **yes**  | Connected entity                                |
+| `ended`     | string | no       | When it stopped being true (`YYYY-MM-DD`, default: today) |
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "fact": "Alice \u2192 works_at \u2192 Acme",
+  "ended": "2026-04-16"
+}
+```
+
+---
+
 ## REST vs MCP: when to use which
 
 | Concern              | REST (`/api/*`)             | MCP (`/mcp`)               |
@@ -232,3 +318,117 @@ Real-time Server-Sent Events stream of palace mutations. See
 **Recommendation:** Use REST when the client has a source URL or structured
 metadata (browser extensions, web scrapers, CLI scripts). Use MCP when the
 client is an AI agent harness that benefits from tool discovery.
+
+---
+
+## Recommended content format: HTML-to-Markdown conversion
+
+Drawer content stored via `POST /api/drawers` should be Markdown. The
+MemoryMark browser extension converts web pages to Markdown before posting
+using the pipeline described below. Third-party clients (scrapers, CLI tools,
+MCP agents) should follow the same approach for consistent search quality and
+readability.
+
+### Pipeline overview
+
+```
+HTML page
+  ├─ 1. Extract metadata from <meta> tags
+  ├─ 2. Readability: strip nav/ads/boilerplate, isolate article body
+  ├─ 3. Turndown: convert cleaned HTML → Markdown (GFM)
+  ├─ 4. Fallback: full <body> conversion if Readability fails
+  ├─ 5. Truncate to 100 000 characters
+  └─ 6. Prepend header block (title, source URL, author/date)
+```
+
+### Step 1 — Metadata extraction
+
+Read standard HTML meta tags in priority order:
+
+| Field        | Primary source                         | Fallback                             |
+|--------------|----------------------------------------|--------------------------------------|
+| `title`      | `<meta property="og:title">`           | `document.title`                     |
+| `author`     | `<meta name="author">`                 | `<meta property="article:author">`   |
+| `date`       | `<meta property="article:published_time">` | —                                |
+| `description`| `<meta name="description">`            | `<meta property="og:description">`   |
+| `source_url` | `window.location.href`                 | —                                    |
+
+### Step 2 — Article extraction (Readability)
+
+Clone the full DOM and pass it to Mozilla's
+[Readability](https://github.com/mozilla/readability) algorithm. Readability
+scores DOM nodes by content density, removing navigation, sidebars, ads,
+footers, and other boilerplate. The result is a clean HTML fragment containing
+only the article body.
+
+If Readability returns a better `title` or `byline` than the meta tags, prefer
+those values.
+
+### Step 3 — HTML-to-Markdown conversion (Turndown + GFM)
+
+Convert the Readability HTML to Markdown using
+[Turndown](https://github.com/mixmark-io/turndown) with the GFM plugin:
+
+| Setting            | Value    | Effect                                |
+|--------------------|----------|---------------------------------------|
+| `headingStyle`     | `atx`    | `<h1>` → `# `, `<h2>` → `## `, etc. |
+| `codeBlockStyle`   | `fenced` | `<pre><code>` → ` ``` `              |
+| `bulletListMarker` | `-`      | `<li>` in `<ul>` → `- `              |
+| GFM plugin         | enabled  | Tables, strikethrough, task lists     |
+
+Element mapping summary:
+
+| HTML                         | Markdown                    |
+|------------------------------|-----------------------------|
+| `<h1>`–`<h6>`               | `#` … `######`              |
+| `<strong>`, `<b>`           | `**bold**`                  |
+| `<em>`, `<i>`               | `*italic*`                  |
+| `<code>`                     | `` `inline` ``              |
+| `<pre><code class="lang-x">` | ` ```x `                   |
+| `<a href="u">text</a>`      | `[text](u)`                 |
+| `<img src="u" alt="d">`     | `![d](u)`                   |
+| `<blockquote>`               | `> `                        |
+| `<ul>` / `<ol>`             | `- ` / `1. ` (nested OK)   |
+| `<table>` (GFM)             | `\| col \| col \|` pipe tables |
+| `<del>`                      | `~~strikethrough~~`         |
+| `<input type="checkbox">`   | `- [x]` / `- [ ]`          |
+
+### Step 4 — Fallback
+
+If Readability fails (e.g. non-article page), convert `document.body.innerHTML`
+directly through Turndown. If Turndown also fails, fall back to plain
+`document.body.innerText`.
+
+### Step 5 — Truncation
+
+Cap the Markdown body at **100 000 characters**. Flag `truncated: true` in the
+return value so callers can note the loss.
+
+### Step 6 — Header block
+
+Prepend a standard header so every drawer is self-describing:
+
+```markdown
+# Page Title
+
+> Source: https://example.com/article
+> Author: Jane Doe | Date: 2026-04-16
+
+[Markdown body from steps 2–5]
+```
+
+The `> Author: … | Date: …` line is omitted when neither field is available.
+
+### Recommendations for third-party clients
+
+1. **Use the same libraries** — Readability and Turndown (or equivalents like
+   `html2text` in Python with `body_width=0`) to keep Markdown style consistent
+   across sources.
+2. **Always include the header block** — the `# Title` heading and `> Source:`
+   blockquote give the vector search meaningful anchor text and enable
+   provenance tracking.
+3. **Pass `source_url` in metadata** — even though the URL is embedded in the
+   Markdown header, the structured `metadata.source_url` field powers
+   `GET /api/drawers/by-url` deduplication.
+4. **Respect the 100k limit** — very large pages degrade embedding quality;
+   split into multiple drawers if needed.

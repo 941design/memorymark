@@ -26,6 +26,9 @@ from mempalace.mcp_server import (
     handle_request as _mempalace_handle_request,
     tool_delete_drawer,
     tool_get_taxonomy,
+    tool_kg_add,
+    tool_kg_invalidate,
+    tool_kg_query,
     tool_list_rooms,
     tool_list_wings,
     tool_search,
@@ -481,3 +484,59 @@ async def get_events(
             unsubscribe(q)
 
     return StreamingResponse(_generate(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# S5: Knowledge Graph endpoints
+# ---------------------------------------------------------------------------
+
+
+class KGFactRequest(BaseModel):
+    subject: str
+    predicate: str
+    object: str
+    valid_from: str | None = None
+    source_closet: str | None = None
+
+
+class KGInvalidateRequest(BaseModel):
+    subject: str
+    predicate: str
+    object: str
+    ended: str | None = None
+
+
+@app.get("/api/kg/query")
+def kg_query(
+    entity: str = Query(...),
+    as_of: str | None = Query(None),
+    direction: str = Query("both"),
+):
+    kwargs = {"entity": entity, "direction": direction}
+    if as_of is not None:
+        kwargs["as_of"] = as_of
+    return tool_kg_query(**kwargs)
+
+
+@app.post("/api/kg/facts", status_code=201)
+def kg_add_fact(req: KGFactRequest):
+    kwargs = {"subject": req.subject, "predicate": req.predicate, "object": req.object}
+    if req.valid_from is not None:
+        kwargs["valid_from"] = req.valid_from
+    if req.source_closet is not None:
+        kwargs["source_closet"] = req.source_closet
+    result = tool_kg_add(**kwargs)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+    return result
+
+
+@app.post("/api/kg/invalidate")
+def kg_invalidate(req: KGInvalidateRequest):
+    kwargs = {"subject": req.subject, "predicate": req.predicate, "object": req.object}
+    if req.ended is not None:
+        kwargs["ended"] = req.ended
+    result = tool_kg_invalidate(**kwargs)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+    return result
