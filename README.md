@@ -117,6 +117,7 @@ memorymark/
 | `make ext-chrome` | Package Chrome extension zip |
 | `make ext-firefox` | Package Firefox extension zip |
 | `make ext-all` | Build both extension zips |
+| `make events` | Tail SSE event stream (requires curl + jq) |
 | `make clean` | Remove build artifacts |
 | `make help` | Show all available targets |
 
@@ -137,6 +138,7 @@ The bridge runs on `localhost:21517` and exposes:
 | `GET` | `/api/rooms` | List rooms |
 | `GET` | `/api/drawers/{id}` | Get drawer by ID (full content) |
 | `GET` | `/api/drawers/by-url` | Duplicate detection by URL |
+| `GET` | `/api/events` | SSE event stream ([docs](docs/sse-events.md)) |
 
 ## MCP Integration
 
@@ -182,7 +184,7 @@ Restart Codex to pick up the change.
 
 ### Other harnesses
 
-Any MCP client supporting Streamable HTTP works the same way — point it at `http://localhost:21517/mcp`. The full MemPalace tool surface (`mempalace_search`, `mempalace_add_drawer`, `mempalace_status`, knowledge-graph tools, diary tools, …) is exposed automatically.
+Any MCP client supporting Streamable HTTP works the same way — point it at `http://localhost:21517/mcp`. See [docs/mcp-integration.md](docs/mcp-integration.md) for the full tool reference (24 tools: search, drawer CRUD, knowledge graph, diary, and more).
 
 ### Inspecting with MCP Inspector
 
