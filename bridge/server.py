@@ -208,6 +208,8 @@ def create_drawer(req: CreateDrawerRequest):
             "added_by": "memorymark",
             "content_length": len(content),
             "content_preview": content[:200],
+            "source_url": source_url or "",
+            "content_hash": hashlib.sha256(content.encode()).hexdigest(),
         },
     )
 
@@ -281,6 +283,9 @@ def update_drawer(drawer_id: str, req: UpdateDrawerRequest):
             "new_room": new_meta.get("room", ""),
             "content_changed": req.content is not None,
             "content_preview": new_doc[:200] if req.content is not None else None,
+            "added_by": old_meta.get("added_by", ""),
+            "source_url": new_meta.get("source_url", old_meta.get("source_url", old_meta.get("source_file", ""))),
+            "content_hash": hashlib.sha256(new_doc.encode()).hexdigest(),
         },
     )
 

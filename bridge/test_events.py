@@ -1,6 +1,7 @@
 """Tests for stories 01 and 02: WAL tailer, broadcaster, and SSE endpoint."""
 
 import asyncio
+import hashlib
 import json
 import socket
 import threading
@@ -348,6 +349,153 @@ def test_tailer_event_has_required_fields():
     assert data["timestamp"] == "2026-04-15T10:00:00.123456"
     assert data["operation"] == "diary_write"
     assert data["params"] == {"wing": "Test", "room": "Diary"}
+
+
+# ---------------------------------------------------------------------------
+# Tests: add_drawer WAL entry includes source_url and content_hash
+# ---------------------------------------------------------------------------
+
+
+def test_add_drawer_wal_includes_source_url_and_content_hash(client):
+    """add_drawer WAL entry must include source_url and content_hash."""
+    resp = client.post("/api/drawers", json={
+        "wing": "Web",
+        "room": "Captures",
+        "content": "hello world",
+        "metadata": {"source_url": "https://example.com/page"},
+    })
+    assert resp.status_code == 201
+
+    wal_path = str(_mp._WAL_FILE)
+    with open(wal_path) as fh:
+        lines = fh.readlines()
+    entry = json.loads(lines[-1])
+    params = entry["params"]
+
+    assert params["source_url"] == "https://example.com/page"
+    assert params["content_hash"] == hashlib.sha256(b"hello world").hexdigest()
+
+
+def test_add_drawer_wal_source_url_empty_when_no_metadata(client):
+    """add_drawer WAL entry has empty source_url when no metadata provided."""
+    resp = client.post("/api/drawers", json={
+        "wing": "Web",
+        "room": "Notes",
+        "content": "no url",
+    })
+    assert resp.status_code == 201
+
+    with open(str(_mp._WAL_FILE)) as fh:
+        lines = fh.readlines()
+    params = json.loads(lines[-1])["params"]
+    assert params["source_url"] == ""
+    assert params["content_hash"] == hashlib.sha256(b"no url").hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Tests: update_drawer WAL entry includes added_by, source_url, content_hash
+# ---------------------------------------------------------------------------
+
+
+def test_update_drawer_wal_includes_added_by_source_url_content_hash(client):
+    """update_drawer WAL entry must include added_by, source_url, content_hash."""
+    # Create a drawer first
+    resp = client.post("/api/drawers", json={
+        "wing": "Web",
+        "room": "Captures",
+        "content": "original",
+        "metadata": {"source_url": "https://example.com/orig"},
+    })
+    assert resp.status_code == 201
+    drawer_id = resp.json()["drawer_id"]
+
+    # Update it
+    resp = client.put(f"/api/drawers/{drawer_id}", json={
+        "content": "updated content",
+    })
+    assert resp.status_code == 200
+
+    with open(str(_mp._WAL_FILE)) as fh:
+        lines = fh.readlines()
+    # Last line is the update_drawer entry
+    entry = json.loads(lines[-1])
+    assert entry["operation"] == "update_drawer"
+    params = entry["params"]
+
+    assert params["added_by"] == "memorymark"
+    assert params["source_url"] == "https://example.com/orig"
+    assert params["content_hash"] == hashlib.sha256(b"updated content").hexdigest()
+
+
+def test_update_drawer_wal_source_url_reflects_metadata_update(client):
+    """update_drawer WAL entry uses new source_url when metadata is updated."""
+    resp = client.post("/api/drawers", json={
+        "wing": "Web",
+        "room": "Captures",
+        "content": "original",
+        "metadata": {"source_url": "https://old.example.com"},
+    })
+    assert resp.status_code == 201
+    drawer_id = resp.json()["drawer_id"]
+
+    resp = client.put(f"/api/drawers/{drawer_id}", json={
+        "metadata": {"source_url": "https://new.example.com"},
+    })
+    assert resp.status_code == 200
+
+    with open(str(_mp._WAL_FILE)) as fh:
+        lines = fh.readlines()
+    params = json.loads(lines[-1])["params"]
+    assert params["source_url"] == "https://new.example.com"
+
+
+def test_update_drawer_wal_source_url_falls_back_to_source_file(client):
+    """update_drawer WAL falls back to source_file when source_url is absent (MCP-created drawers)."""
+    # Simulate MCP-created drawer: metadata has source_file but no source_url
+    from mempalace.mcp_server import _get_collection
+    col = _get_collection(create=True)
+    drawer_id = "drawer_Web_Captures_mcp_test_000000000000"
+    col.upsert(
+        ids=[drawer_id],
+        documents=["mcp content"],
+        metadatas=[{
+            "wing": "Web",
+            "room": "Captures",
+            "source_file": "https://mcp-origin.example.com",
+            "chunk_index": 0,
+            "added_by": "mcp",
+            "filed_at": "2026-04-16T00:00:00",
+        }],
+    )
+
+    resp = client.put(f"/api/drawers/{drawer_id}", json={"content": "updated via REST"})
+    assert resp.status_code == 200
+
+    with open(str(_mp._WAL_FILE)) as fh:
+        lines = fh.readlines()
+    params = json.loads(lines[-1])["params"]
+    assert params["source_url"] == "https://mcp-origin.example.com"
+    assert params["added_by"] == "mcp"
+
+
+def test_update_drawer_wal_content_hash_uses_current_content_when_unchanged(client):
+    """update_drawer WAL content_hash reflects current content even when only metadata changes."""
+    resp = client.post("/api/drawers", json={
+        "wing": "Web",
+        "room": "Captures",
+        "content": "stable content",
+    })
+    assert resp.status_code == 201
+    drawer_id = resp.json()["drawer_id"]
+
+    # Update only the room, not the content
+    resp = client.put(f"/api/drawers/{drawer_id}", json={"room": "Archive"})
+    assert resp.status_code == 200
+
+    with open(str(_mp._WAL_FILE)) as fh:
+        lines = fh.readlines()
+    params = json.loads(lines[-1])["params"]
+    assert params["content_hash"] == hashlib.sha256(b"stable content").hexdigest()
 
 
 # ---------------------------------------------------------------------------

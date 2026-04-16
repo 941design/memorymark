@@ -105,7 +105,7 @@ A blank line terminates each frame. Example:
 ```
 id: 17
 event: add_drawer
-data: {"timestamp":"2026-04-15T10:00:00.123456","operation":"add_drawer","params":{"drawer_id":"drawer_Web_Captures_a1b2c3d4e5f6a1b2c3d4e5f6","wing":"Web","room":"Captures","added_by":"memorymark","content_length":5000,"content_preview":"# Page Title\n\nFirst 200 characters of content..."}}
+data: {"timestamp":"2026-04-15T10:00:00.123456","operation":"add_drawer","params":{"drawer_id":"drawer_Web_Captures_a1b2c3d4e5f6a1b2c3d4e5f6","wing":"Web","room":"Captures","added_by":"memorymark","content_length":5000,"content_preview":"# Page Title\n\nFirst 200 characters of content...","source_url":"https://example.com/page","content_hash":"e3b0c44298fc1c149afbf4c8996fb924..."}}
 
 ```
 
@@ -151,7 +151,9 @@ Fired when a new drawer is created (via REST `POST /api/drawers` or MCP
     "room": "Captures",
     "added_by": "memorymark",
     "content_length": 5000,
-    "content_preview": "# Page Title\n\nFirst 200 chars..."
+    "content_preview": "# Page Title\n\nFirst 200 chars...",
+    "source_url": "https://example.com/page",
+    "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   }
 }
 ```
@@ -164,6 +166,8 @@ Fired when a new drawer is created (via REST `POST /api/drawers` or MCP
 | `added_by`        | string  | Creator (`memorymark`, `mcp`, or agent name)   |
 | `content_length`  | integer | Full content length in characters              |
 | `content_preview` | string  | First 200 characters of content                |
+| `source_url`      | string  | Source URL of the captured page (empty string if none) |
+| `content_hash`    | string  | SHA-256 hex digest of the full content         |
 
 ### `update_drawer`
 
@@ -180,7 +184,10 @@ Fired when a drawer's content or metadata is modified.
     "new_wing": "Web",
     "new_room": "Articles",
     "content_changed": true,
-    "content_preview": "# Updated Title\n\nNew content..."
+    "content_preview": "# Updated Title\n\nNew content...",
+    "added_by": "memorymark",
+    "source_url": "https://example.com/page",
+    "content_hash": "a1b2c3d4e5f6..."
   }
 }
 ```
@@ -194,6 +201,9 @@ Fired when a drawer's content or metadata is modified.
 | `new_room`        | string       | New room (same as old if unchanged)      |
 | `content_changed` | boolean      | Whether content itself was modified      |
 | `content_preview` | string\|null | First 200 chars of new content (if changed) |
+| `added_by`        | string       | Original creator of the drawer           |
+| `source_url`      | string       | Source URL (reflects latest metadata)    |
+| `content_hash`    | string       | SHA-256 hex digest of current content    |
 
 ### `delete_drawer`
 
