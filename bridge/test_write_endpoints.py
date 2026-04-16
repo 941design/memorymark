@@ -129,8 +129,8 @@ def test_create_drawer_writes_all_metadata_atomically(client):
     full = client.get(f"/api/drawers/{drawer_id}").json()
     assert full["wing"] == "Web"
     assert full["room"] == "Captures"
-    assert full["title"] == "Test Page"
-    assert full["source_url"] == "https://example.com/test"
+    assert full["metadata"]["title"] == "Test Page"
+    assert full["metadata"]["source_url"] == "https://example.com/test"
 
 
 def test_update_drawer_preserves_custom_metadata_when_only_content_changes(client):
@@ -142,8 +142,8 @@ def test_update_drawer_preserves_custom_metadata_when_only_content_changes(clien
     assert resp.status_code == 200
 
     full = client.get(f"/api/drawers/{drawer_id}").json()
-    assert full["title"] == "Test Page"
-    assert full["source_url"] == "https://example.com/test"
+    assert full["metadata"]["title"] == "Test Page"
+    assert full["metadata"]["source_url"] == "https://example.com/test"
 
 
 def test_update_drawer_source_url_keeps_source_file_in_sync(client):
@@ -163,3 +163,43 @@ def test_update_drawer_source_url_keeps_source_file_in_sync(client):
     ).json()
     assert by_url["exists"] is True
     assert by_url["drawer_id"] == drawer_id
+
+
+def test_create_drawer_accepts_top_level_added_by(client):
+    """POST /api/drawers must persist a caller-supplied added_by (e.g. daydreamer)."""
+    resp = client.post("/api/drawers", json={
+        "wing": "Agent",
+        "room": "Synthesis",
+        "content": "daydreamer wrote this",
+        "added_by": "daydreamer",
+    })
+    assert resp.status_code == 201
+    drawer_id = resp.json()["drawer_id"]
+
+    full = client.get(f"/api/drawers/{drawer_id}").json()
+    assert full["added_by"] == "daydreamer"
+
+
+def test_create_drawer_defaults_added_by_to_memorymark(client):
+    """When added_by is omitted, POST /api/drawers defaults to 'memorymark'."""
+    resp = _create_test_drawer(client)
+    drawer_id = resp.json()["drawer_id"]
+    full = client.get(f"/api/drawers/{drawer_id}").json()
+    assert full["added_by"] == "memorymark"
+
+
+def test_update_drawer_preserves_creator_provenance(client):
+    """PUT /api/drawers/{id} must keep original added_by after an update."""
+    create = client.post("/api/drawers", json={
+        "wing": "Agent",
+        "room": "Synthesis",
+        "content": "original",
+        "added_by": "daydreamer",
+    })
+    drawer_id = create.json()["drawer_id"]
+
+    resp = client.put(f"/api/drawers/{drawer_id}", json={"content": "rewritten"})
+    assert resp.status_code == 200
+
+    full = client.get(f"/api/drawers/{drawer_id}").json()
+    assert full["added_by"] == "daydreamer"

@@ -1,4 +1,6 @@
-.PHONY: up down logs build ext-chrome ext-firefox ext-all clean test dev help
+.PHONY: up down logs build ext-chrome ext-firefox ext-all clean test dev events help
+
+BRIDGE_URL ?= http://127.0.0.1:21517
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -13,6 +15,17 @@ down: ## Stop the bridge
 
 logs: ## Tail bridge logs
 	docker compose logs -f memorymark-bridge
+
+events: ## Tail SSE event stream (requires curl + jq); override BRIDGE_URL / LAST_ID
+	@curl -sN $(if $(LAST_ID),-H "Last-Event-ID: $(LAST_ID)") $(BRIDGE_URL)/api/events | \
+		while IFS= read -r line; do \
+			case "$$line" in \
+				"data: "*) printf '%s\n' "$${line#data: }" | jq . ;; \
+				"id: "*|"event: "*|":"*) printf '\033[2m%s\033[0m\n' "$$line" ;; \
+				"") printf '\n' ;; \
+				*) printf '%s\n' "$$line" ;; \
+			esac; \
+		done
 
 build: ## Rebuild the Docker image
 	docker compose build memorymark-bridge

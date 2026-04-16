@@ -25,15 +25,16 @@ from mempalace.mcp_server import (
     _get_collection,
     handle_request as _mempalace_handle_request,
     tool_delete_drawer,
+    tool_diary_write,
     tool_get_taxonomy,
     tool_kg_add,
     tool_kg_invalidate,
     tool_kg_query,
     tool_list_rooms,
     tool_list_wings,
-    tool_search,
     tool_status,
 )
+from mempalace.searcher import build_where_filter
 
 # ---------------------------------------------------------------------------
 # MCP Streamable HTTP: expose MemPalace's full tool surface at /mcp so agent
@@ -149,6 +150,7 @@ class CreateDrawerRequest(BaseModel):
     wing: str
     room: str
     content: str
+    added_by: str | None = None
     metadata: DrawerMetadata | None = None
 
 
@@ -173,6 +175,7 @@ def create_drawer(req: CreateDrawerRequest):
         raise HTTPException(status_code=500, detail="No palace found")
 
     source_url = req.metadata.source_url if req.metadata else None
+    added_by = req.added_by or "memorymark"
     drawer_id = (
         f"drawer_{wing}_{room}_"
         f"{hashlib.sha256((wing + room + content).encode()).hexdigest()[:24]}"
@@ -191,7 +194,7 @@ def create_drawer(req: CreateDrawerRequest):
         "room": room,
         "source_file": source_url or "",
         "chunk_index": 0,
-        "added_by": "memorymark",
+        "added_by": added_by,
         "filed_at": datetime.now().isoformat(),
     }
     if req.metadata:
@@ -208,7 +211,7 @@ def create_drawer(req: CreateDrawerRequest):
             "drawer_id": drawer_id,
             "wing": wing,
             "room": room,
-            "added_by": "memorymark",
+            "added_by": added_by,
             "content_length": len(content),
             "content_preview": content[:200],
             "source_url": source_url or "",
@@ -285,7 +288,7 @@ def update_drawer(drawer_id: str, req: UpdateDrawerRequest):
             "new_wing": new_meta.get("wing", ""),
             "new_room": new_meta.get("room", ""),
             "content_changed": req.content is not None,
-            "content_preview": new_doc[:200] if req.content is not None else None,
+            "content_preview": new_doc[:200],
             "added_by": old_meta.get("added_by", ""),
             "source_url": new_meta.get("source_url", old_meta.get("source_url", old_meta.get("source_file", ""))),
             "content_hash": hashlib.sha256(new_doc.encode()).hexdigest(),
@@ -328,14 +331,65 @@ def search(
     max_distance: float | None = Query(None),
     limit: int = Query(5),
 ):
-    kwargs = {"query": query, "limit": limit}
-    if wing is not None:
-        kwargs["wing"] = wing
-    if room is not None:
-        kwargs["room"] = room
-    if max_distance is not None:
-        kwargs["max_distance"] = max_distance
-    return tool_search(**kwargs)
+    limit = max(1, min(limit, 50))
+    col = _get_collection()
+    if col is None:
+        return {
+            "query": query,
+            "filters": {"wing": wing, "room": room},
+            "results": [],
+        }
+
+    try:
+        wing_filter = sanitize_name(wing, "wing") if wing else None
+        room_filter = sanitize_name(room, "room") if room else None
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    where = build_where_filter(wing_filter, room_filter)
+    query_kwargs = {
+        "query_texts": [query],
+        "n_results": limit,
+        "include": ["documents", "metadatas", "distances"],
+    }
+    if where:
+        query_kwargs["where"] = where
+
+    try:
+        chroma_results = col.query(**query_kwargs)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search error: {e}")
+
+    ids = chroma_results["ids"][0] if chroma_results.get("ids") else []
+    docs = chroma_results["documents"][0] if chroma_results.get("documents") else []
+    metas = chroma_results["metadatas"][0] if chroma_results.get("metadatas") else []
+    dists = chroma_results["distances"][0] if chroma_results.get("distances") else []
+
+    hits = []
+    for drawer_id, doc, meta, dist in zip(ids, docs, metas, dists):
+        if max_distance is not None and dist > max_distance:
+            continue
+        meta = meta or {}
+        source_url = meta.get("source_url") or meta.get("source_file", "")
+        hits.append({
+            "drawer_id": drawer_id,
+            "content": doc or "",
+            "metadata": {
+                "source_url": source_url,
+                "title": meta.get("title", ""),
+                "timestamp": meta.get("timestamp") or meta.get("filed_at", ""),
+            },
+            "distance": round(dist, 4),
+            "wing": meta.get("wing", ""),
+            "room": meta.get("room", ""),
+            "added_by": meta.get("added_by", ""),
+        })
+
+    return {
+        "query": query,
+        "filters": {"wing": wing_filter, "room": room_filter},
+        "results": hits,
+    }
 
 
 @app.get("/api/status")
@@ -400,14 +454,21 @@ def get_drawer(drawer_id: str):
     result = col.get(ids=[drawer_id], include=["documents", "metadatas"])
     if not result["ids"]:
         raise HTTPException(status_code=404, detail=f"Drawer not found: {drawer_id}")
-    meta = result["metadatas"][0]
+    meta = result["metadatas"][0] or {}
+    content = result["documents"][0] if result.get("documents") else ""
+    source_url = meta.get("source_url") or meta.get("source_file", "")
     return {
         "drawer_id": drawer_id,
-        "content": result["documents"][0] if result.get("documents") else "",
+        "content": content,
         "wing": meta.get("wing", ""),
         "room": meta.get("room", ""),
-        "title": meta.get("title", ""),
-        "source_url": meta.get("source_url", ""),
+        "added_by": meta.get("added_by", ""),
+        "content_hash": hashlib.sha256(content.encode()).hexdigest(),
+        "metadata": {
+            "source_url": source_url,
+            "title": meta.get("title", ""),
+            "timestamp": meta.get("timestamp") or meta.get("filed_at", ""),
+        },
     }
 
 
@@ -537,6 +598,29 @@ def kg_invalidate(req: KGInvalidateRequest):
     if req.ended is not None:
         kwargs["ended"] = req.ended
     result = tool_kg_invalidate(**kwargs)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# S6: Diary endpoint
+# ---------------------------------------------------------------------------
+
+
+class DiaryWriteRequest(BaseModel):
+    agent_name: str
+    entry: str
+    topic: str = "general"
+
+
+@app.post("/api/diary/write", status_code=201)
+def diary_write(req: DiaryWriteRequest):
+    result = tool_diary_write(
+        agent_name=req.agent_name,
+        entry=req.entry,
+        topic=req.topic,
+    )
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
     return result

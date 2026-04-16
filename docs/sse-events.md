@@ -192,18 +192,18 @@ Fired when a drawer's content or metadata is modified.
 }
 ```
 
-| Param             | Type         | Description                              |
-|-------------------|--------------|------------------------------------------|
-| `drawer_id`       | string       | Drawer that was updated                  |
-| `old_wing`        | string       | Previous wing                            |
-| `old_room`        | string       | Previous room                            |
-| `new_wing`        | string       | New wing (same as old if unchanged)      |
-| `new_room`        | string       | New room (same as old if unchanged)      |
-| `content_changed` | boolean      | Whether content itself was modified      |
-| `content_preview` | string\|null | First 200 chars of new content (if changed) |
-| `added_by`        | string       | Original creator of the drawer           |
-| `source_url`      | string       | Source URL (reflects latest metadata)    |
-| `content_hash`    | string       | SHA-256 hex digest of current content    |
+| Param             | Type    | Description                                    |
+|-------------------|---------|------------------------------------------------|
+| `drawer_id`       | string  | Drawer that was updated                        |
+| `old_wing`        | string  | Previous wing                                  |
+| `old_room`        | string  | Previous room                                  |
+| `new_wing`        | string  | New wing (same as old if unchanged)            |
+| `new_room`        | string  | New room (same as old if unchanged)            |
+| `content_changed` | boolean | Whether content itself was modified            |
+| `content_preview` | string  | First 200 chars of current content (always present) |
+| `added_by`        | string  | Stored creator of the drawer (preserved across updates) |
+| `source_url`      | string  | Source URL (reflects latest metadata)          |
+| `content_hash`    | string  | SHA-256 hex digest of current content          |
 
 ### `delete_drawer`
 
@@ -215,7 +215,28 @@ The `params` shape depends on the MemPalace WAL entry. At minimum, expect
 
 ### `diary_write`
 
-Fired when an agent writes a diary entry via `mempalace_diary_write`.
+Fired when an agent writes a diary entry via `POST /api/diary/write` (REST) or
+`mempalace_diary_write` (MCP).
+
+```json
+{
+  "timestamp": "2026-04-16T10:15:30.123456",
+  "operation": "diary_write",
+  "params": {
+    "agent_name": "daydreamer",
+    "topic": "synthesis",
+    "entry_id": "diary_wing_daydreamer_20260416_101530_abc123def456",
+    "entry_preview": "SESSION:2026-04-16|observed.drawer.drift|..."
+  }
+}
+```
+
+| Param           | Type   | Description                                       |
+|-----------------|--------|---------------------------------------------------|
+| `agent_name`    | string | Agent identity (its own wing within the palace)   |
+| `topic`         | string | Logical topic bucket (default `general`)          |
+| `entry_id`      | string | Deterministic diary entry ID                      |
+| `entry_preview` | string | First 200 characters of the diary entry           |
 
 ### Other operations
 

@@ -1,0 +1,165 @@
+# MemoryMark bridge API requests for Emacs restclient-mode
+
+:base-url = http://localhost:21517
+:drawer-id = replace-me
+:page-url = https://example.com/test
+:search-query = python
+
+#
+# Health
+#
+GET :base-url/api/health
+
+#
+# Create drawer
+#
+POST :base-url/api/drawers
+Content-Type: application/json
+
+{
+  "wing": "Web",
+  "room": "Captures",
+  "content": "# Test Page\n\nSome content here.",
+  "added_by": "memorymark",
+  "metadata": {
+    "source_url": "https://example.com/test",
+    "title": "Test Page",
+    "timestamp": "2026-04-13T00:00:00Z"
+  }
+}
+
+#
+# Create drawer — agent-authored (daydreamer synthesis)
+#
+POST :base-url/api/drawers
+Content-Type: application/json
+
+{
+  "wing": "Agent",
+  "room": "Synthesis",
+  "content": "daydreamer-synthesized opinion",
+  "added_by": "daydreamer"
+}
+
+#
+# Update drawer
+#
+PUT :base-url/api/drawers/:drawer-id
+Content-Type: application/json
+
+{
+  "content": "# Updated Test Page\n\nUpdated content.",
+  "metadata": {
+    "title": "Updated Test Page"
+  }
+}
+
+#
+# Delete drawer
+#
+DELETE :base-url/api/drawers/:drawer-id
+
+#
+# Search
+#
+GET :base-url/api/search?query=:search-query&limit=5
+
+#
+# Status
+#
+GET :base-url/api/status
+
+#
+# Taxonomy
+#
+GET :base-url/api/taxonomy
+
+#
+# Wings
+#
+GET :base-url/api/wings
+
+#
+# Rooms
+#
+GET :base-url/api/rooms
+
+#
+# Rooms filtered by wing
+#
+GET :base-url/api/rooms?wing=Web
+
+#
+# Get drawer by ID
+#
+GET :base-url/api/drawers/:drawer-id
+
+#
+# Drawer by URL (metadata only)
+#
+GET :base-url/api/drawers/by-url?url=:page-url
+
+#
+# Drawer by URL (with content)
+#
+GET :base-url/api/drawers/by-url?url=:page-url&include_content=true
+
+#
+# Events — live stream (all ops)
+#
+GET :base-url/api/events
+Accept: text/event-stream
+
+#
+# Events — filter by ops
+#
+GET :base-url/api/events?ops=add_drawer,update_drawer
+Accept: text/event-stream
+
+#
+# Events — replay from timestamp (cursor-stale fallback)
+#
+GET :base-url/api/events?since_timestamp=2026-04-15T00:00:00.000000
+Accept: text/event-stream
+
+#
+# KG — query facts for an entity
+#
+GET :base-url/api/kg/query?entity=Alice
+
+#
+# KG — add a fact triple (e.g. opinion supported_by entity)
+#
+POST :base-url/api/kg/facts
+Content-Type: application/json
+
+{
+  "subject": "opinion:op_123",
+  "predicate": "supported_by",
+  "object": "Alice",
+  "source_closet": "drawer_Agent_Synthesis_abc123"
+}
+
+#
+# KG — invalidate a fact
+#
+POST :base-url/api/kg/invalidate
+Content-Type: application/json
+
+{
+  "subject": "Alice",
+  "predicate": "works_at",
+  "object": "Acme"
+}
+
+#
+# Diary — daydreamer writes an entry (no MCP fallback)
+#
+POST :base-url/api/diary/write
+Content-Type: application/json
+
+{
+  "agent_name": "daydreamer",
+  "entry": "SESSION:2026-04-16|observed.drawer.drift|★★",
+  "topic": "synthesis"
+}

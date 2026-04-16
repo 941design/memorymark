@@ -47,6 +47,7 @@ event).
 | `wing`             | string | **yes**  | Wing name                                 |
 | `room`             | string | **yes**  | Room name                                 |
 | `content`          | string | **yes**  | Full content to store                     |
+| `added_by`         | string | no       | Creator tag; persisted verbatim and echoed in SSE events. Defaults to `"memorymark"`. Agents such as daydreamer must set this to mark their own writes. |
 | `metadata`         | object | no       | Optional metadata object (see below)      |
 
 **Metadata object:**
@@ -62,7 +63,8 @@ event).
 { "success": true, "drawer_id": "drawer_Web_Captures_a1b2c3..." }
 ```
 
-**SSE event emitted:** `add_drawer` with `source_url`, `content_hash`, `added_by`, `content_length`, `content_preview`.
+**SSE event emitted:** `add_drawer` with `drawer_id`, `wing`, `room`,
+`added_by`, `content_length`, `content_preview`, `source_url`, `content_hash`.
 
 ---
 
@@ -70,6 +72,11 @@ event).
 
 Update an existing drawer's content, location, and/or metadata. All fields are
 optional — omit a field to keep its current value.
+
+Creator provenance is preserved: `added_by` is stored at create time and cannot
+be changed by an update. The value emitted on the `update_drawer` SSE event
+(and written to the WAL) reflects the stored creator, not the identity of the
+agent performing the update.
 
 **Request body:**
 
@@ -85,7 +92,9 @@ optional — omit a field to keep its current value.
 { "success": true, "drawer_id": "drawer_Web_Captures_a1b2c3..." }
 ```
 
-**SSE event emitted:** `update_drawer` with `added_by`, `source_url`, `content_hash`, plus location diff fields.
+**SSE event emitted:** `update_drawer` with `drawer_id`, `old_wing`, `old_room`,
+`new_wing`, `new_room`, `content_changed`, `content_preview`, `added_by`
+(stored creator), `source_url`, `content_hash`.
 
 ---
 
@@ -115,10 +124,27 @@ Fetch a single drawer by ID.
   "content": "...",
   "wing": "Web",
   "room": "Captures",
-  "title": "Page Title",
-  "source_url": "https://example.com/page"
+  "added_by": "memorymark",
+  "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "metadata": {
+    "source_url": "https://example.com/page",
+    "title": "Page Title",
+    "timestamp": "2026-04-13T00:00:00Z"
+  }
 }
 ```
+
+| Field          | Type   | Description                                               |
+|----------------|--------|-----------------------------------------------------------|
+| `drawer_id`    | string | Content-addressed drawer ID                               |
+| `content`      | string | Full drawer content (Markdown)                            |
+| `wing`         | string | Wing the drawer is filed in                               |
+| `room`         | string | Room the drawer is filed in                               |
+| `added_by`     | string | Original creator (`memorymark`, `mcp`, or an agent name)  |
+| `content_hash` | string | SHA-256 hex digest of the current content                 |
+| `metadata`     | object | Normalized metadata with `source_url`, `title`, `timestamp` |
+
+**Errors:** 404 if the drawer does not exist.
 
 ---
 
@@ -157,8 +183,35 @@ Semantic search across palace drawers.
 | `query`        | string  | **yes**  | Search keywords or question                |
 | `wing`         | string  | no       | Filter by wing                             |
 | `room`         | string  | no       | Filter by room                             |
-| `max_distance` | number  | no       | Max cosine distance (default 1.5)          |
-| `limit`        | integer | no       | Max results (default 5)                    |
+| `max_distance` | number  | no       | Max cosine distance (unbounded when omitted) |
+| `limit`        | integer | no       | Max results (default 5, capped at 50)      |
+
+**Response:**
+```json
+{
+  "query": "python programming",
+  "filters": { "wing": null, "room": null },
+  "results": [
+    {
+      "drawer_id": "drawer_Web_Captures_a1b2c3...",
+      "content": "# Python Tutorial\n...",
+      "metadata": {
+        "source_url": "https://example.com/python",
+        "title": "Python Tutorial",
+        "timestamp": "2026-04-13T01:00:00Z"
+      },
+      "distance": 0.3421,
+      "wing": "Web",
+      "room": "Captures",
+      "added_by": "memorymark"
+    }
+  ]
+}
+```
+
+Each result object is guaranteed to include `drawer_id`, `content`, `metadata`
+(with `source_url`, `title`, `timestamp`), `distance`, `wing`, `room`, and
+`added_by`.
 
 ---
 
@@ -215,6 +268,48 @@ List rooms, optionally filtered by wing.
 
 Real-time Server-Sent Events stream of palace mutations. See
 [sse-events.md](sse-events.md) for full documentation.
+
+Supported query parameters (filters and replay):
+
+| Parameter         | Description                                               |
+|-------------------|-----------------------------------------------------------|
+| `ops`             | Comma-separated operation names (e.g. `add_drawer,update_drawer`). Server-side filtering; unmatched events are dropped in both replay and live phases. |
+| `since_timestamp` | ISO-8601 timestamp. Replay all events with `timestamp >= value`, then stream live. Required fallback when a `Last-Event-ID` cursor is older than the ring buffer and a `cursor-stale` frame has been emitted. |
+
+The `Last-Event-ID` request header (set automatically by `EventSource`) takes
+priority over `since_timestamp` when both are present.
+
+---
+
+## Diary
+
+### `POST /api/diary/write`
+
+Write an agent diary entry. The daydreamer and other autonomous agents MUST
+use this endpoint directly (no MCP fallback) so every diary write is captured
+in the bridge's WAL and appears in the SSE stream.
+
+**Request body:**
+
+| Field        | Type   | Required | Description                                    |
+|--------------|--------|----------|------------------------------------------------|
+| `agent_name` | string | **yes**  | Agent identity; each agent gets its own wing   |
+| `entry`      | string | **yes**  | Diary entry body (AAAK format recommended)     |
+| `topic`      | string | no       | Logical topic bucket (default `"general"`)     |
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "entry_id": "diary_wing_daydreamer_20260416_101530_abc123def456",
+  "agent": "daydreamer",
+  "topic": "synthesis",
+  "timestamp": "2026-04-16T10:15:30.123456"
+}
+```
+
+**SSE event emitted:** `diary_write` with `agent_name`, `topic`, `entry_id`,
+`entry_preview`.
 
 ---
 

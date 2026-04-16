@@ -188,6 +188,45 @@ def test_get_drawer_by_id(client):
     assert data["room"] == "Captures"
 
 
+def test_get_drawer_returns_full_contract(client):
+    """GET /api/drawers/{id} must include drawer_id, content, wing, room,
+    added_by, content_hash, and normalized metadata with source_url/title/timestamp.
+    """
+    import hashlib
+    ids = _seed_drawers(client)
+    resp = client.get(f"/api/drawers/{ids[0]}")
+    assert resp.status_code == 200
+    data = resp.json()
+    for key in ("drawer_id", "content", "wing", "room", "added_by", "content_hash", "metadata"):
+        assert key in data, f"missing top-level key: {key}"
+    assert data["content_hash"] == hashlib.sha256(data["content"].encode()).hexdigest()
+    meta = data["metadata"]
+    for key in ("source_url", "title", "timestamp"):
+        assert key in meta, f"missing metadata key: {key}"
+    assert meta["source_url"] == "https://example.com/python"
+    assert meta["title"] == "Python Tutorial"
+    assert meta["timestamp"] == "2026-04-13T01:00:00Z"
+
+
 def test_get_drawer_not_found(client):
     resp = client.get("/api/drawers/nonexistent-id")
     assert resp.status_code == 404
+
+
+def test_search_result_contract(client):
+    """GET /api/search must return per-result drawer_id, content, metadata,
+    distance, wing, room, added_by."""
+    _seed_drawers(client)
+    resp = client.get("/api/search", params={"query": "Python programming"})
+    assert resp.status_code == 200
+    results = resp.json().get("results", [])
+    assert len(results) >= 1
+    first = results[0]
+    for key in ("drawer_id", "content", "metadata", "distance", "wing", "room", "added_by"):
+        assert key in first, f"missing per-result key: {key}"
+    assert isinstance(first["metadata"], dict)
+    assert "source_url" in first["metadata"]
+    assert "title" in first["metadata"]
+    assert "timestamp" in first["metadata"]
+    assert isinstance(first["distance"], (int, float))
+    assert first["added_by"] == "memorymark"
