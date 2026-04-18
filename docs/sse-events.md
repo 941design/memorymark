@@ -12,7 +12,7 @@ GET http://localhost:21517/api/events
 |-------------------|------------------------------------|
 | Content-Type      | `text/event-stream`                |
 | Authentication    | None (loopback-only)               |
-| Heartbeat         | `: keepalive` comment every 15 s   |
+| Heartbeat         | `: keepalive` comment every 3 s    |
 | Reconnect support | `Last-Event-ID` header             |
 | CORS              | `chrome-extension://` and `moz-extension://` origins only |
 
@@ -252,15 +252,19 @@ should handle unknown event types gracefully.
 The bridge emits two synthetic event types that are not WAL entries. They signal
 stream health issues.
 
+Both synthetic event types carry the same envelope as regular events
+(`timestamp`, `operation`, `params`) and are always delivered regardless of the
+`ops` filter, so clients that restrict the stream still see these control
+signals.
+
 ### `overrun`
 
 Emitted when the server-side subscriber queue (256 items) overflows. The client
 is consuming events too slowly.
 
 ```
-id: 100
 event: overrun
-data: {}
+data: {"timestamp":"2026-04-18T11:55:13.966","operation":"overrun","params":{}}
 ```
 
 **What to do:** The client missed events. Use the `id` from the most recent
@@ -275,7 +279,7 @@ buffer's oldest entry (ring buffer holds the last 1024 events).
 ```
 id: 500
 event: cursor-stale
-data: {"min_id": 501}
+data: {"timestamp":"2026-04-18T11:55:13.966","operation":"cursor-stale","params":{"min_id":501}}
 ```
 
 | Param    | Type    | Description                                        |
@@ -298,8 +302,10 @@ Restrict the stream to specific operations. Comma-separated.
 GET /api/events?ops=add_drawer,delete_drawer
 ```
 
-Only `add_drawer` and `delete_drawer` events will be delivered. All others are
-silently dropped. Applies to both replay and live phases.
+Only `add_drawer` and `delete_drawer` events will be delivered. All other data
+events are silently dropped. Applies to both replay and live phases. Synthetic
+control events (`overrun`, `cursor-stale`) are exempt from the filter so clients
+always see them.
 
 ### `since_timestamp` --- replay from a point in time
 
@@ -358,7 +364,7 @@ If both `Last-Event-ID` header and `since_timestamp` parameter are present,
 
 ## Heartbeat
 
-The server sends an SSE comment frame every 15 seconds when idle:
+The server sends an SSE comment frame every 3 seconds when idle:
 
 ```
 : keepalive

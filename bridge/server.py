@@ -476,8 +476,9 @@ def get_drawer(drawer_id: str):
 # S4: SSE event stream
 # ---------------------------------------------------------------------------
 
-_SSE_HEARTBEAT_INTERVAL: float = 15.0  # seconds; monkeypatch in tests
+_SSE_HEARTBEAT_INTERVAL: float = 3.0  # seconds; monkeypatch in tests. Must be < httpx default read timeout (5 s).
 _SSE_POLL_TIMEOUT: float = 1.0  # inner loop poll; keeps disconnect detection responsive
+_SSE_CONTROL_EVENTS: frozenset[str] = frozenset({"cursor-stale", "overrun"})
 
 
 @app.get("/api/events")
@@ -494,9 +495,12 @@ async def get_events(
         ops_filter = {o.strip() for o in ops.split(",") if o.strip()}
 
     def _matches_ops(event: dict) -> bool:
+        event_name = event.get("event", "")
+        if event_name in _SSE_CONTROL_EVENTS:
+            return True
         if ops_filter is None:
             return True
-        return event.get("event", "") in ops_filter
+        return event_name in ops_filter
 
     def _format_event(event: dict) -> str:
         event_id = event.get("id", "")

@@ -552,7 +552,7 @@ def _live_server():
         server.should_exit = True
         thread.join(timeout=5.0)
         # Reset timings to defaults
-        srv._SSE_HEARTBEAT_INTERVAL = 15.0
+        srv._SSE_HEARTBEAT_INTERVAL = 3.0
         srv._SSE_POLL_TIMEOUT = 1.0
 
 

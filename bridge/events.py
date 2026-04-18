@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from collections import deque
+from datetime import datetime
 from typing import Any
 
 import mempalace.mcp_server as _mp
@@ -42,7 +43,14 @@ def _put_to_queue(q: asyncio.Queue, item: dict[str, Any]) -> None:
                 q.get_nowait()
             except asyncio.QueueEmpty:
                 break
-        overrun: dict[str, Any] = {"event": "overrun", "data": {}}
+        overrun: dict[str, Any] = {
+            "event": "overrun",
+            "data": {
+                "timestamp": datetime.now().isoformat(),
+                "operation": "overrun",
+                "params": {},
+            },
+        }
         q.put_nowait(overrun)
     q.put_nowait(item)
 
@@ -155,7 +163,15 @@ def replay_from_id(last_id: int) -> list[dict[str, Any]]:
     oldest_id = buf[0].get("id", 0)
     if last_id < oldest_id - 1:
         # Cursor is older than ring buffer can serve — emit stale signal
-        return [{"id": oldest_id - 1, "event": "cursor-stale", "data": {"min_id": oldest_id}}]
+        return [{
+            "id": oldest_id - 1,
+            "event": "cursor-stale",
+            "data": {
+                "timestamp": datetime.now().isoformat(),
+                "operation": "cursor-stale",
+                "params": {"min_id": oldest_id},
+            },
+        }]
     return [e for e in buf if e.get("id", 0) > last_id]
 
 
