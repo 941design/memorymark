@@ -123,6 +123,46 @@ def test_kg_invalidate_missing_required_field(client):
     assert resp.status_code == 422
 
 
+def test_kg_add_fact_invalid_subject_returns_structured_error(client):
+    resp = client.post("/api/kg/facts", json={
+        "subject": "opinion:abc_123",
+        "predicate": "supported_by",
+        "object": "Python",
+    })
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["detail"] == "subject contains invalid characters"
+    assert body["field"] == "subject"
+    assert body["value"] == "opinion:abc_123"
+    assert body["allowed_pattern"].startswith("^")
+    assert body["invalid_chars"] == [":"]
+
+
+def test_kg_add_fact_oversized_subject_returns_max_length(client):
+    resp = client.post("/api/kg/facts", json={
+        "subject": "a" * 129,
+        "predicate": "works_at",
+        "object": "Acme",
+    })
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["field"] == "subject"
+    assert body["max_length"] == 128
+
+
+def test_kg_invalidate_invalid_predicate_returns_structured_error(client):
+    resp = client.post("/api/kg/invalidate", json={
+        "subject": "Alice",
+        "predicate": "works@at",
+        "object": "Acme",
+    })
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["field"] == "predicate"
+    assert body["value"] == "works@at"
+    assert "@" in body["invalid_chars"]
+
+
 def test_kg_query_with_as_of(client):
     client.post("/api/kg/facts", json={
         "subject": "Alice",

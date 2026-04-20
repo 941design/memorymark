@@ -2,13 +2,14 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger("memorymark.bridge")
@@ -555,6 +556,43 @@ async def get_events(
 # S5: Knowledge Graph endpoints
 # ---------------------------------------------------------------------------
 
+# Mirrors mempalace.config.sanitize_name so KG validation errors can surface
+# an actionable allowed_pattern to clients. Keep in sync with docs/rest-api.md
+# and the upstream rule if mempalace ever loosens or tightens it.
+_KG_ALLOWED_PATTERN = r"^(?:[^\W_]|[^\W_][\w .'-]{0,126}[^\W_])$"
+_KG_ALLOWED_CHAR_RE = re.compile(r"[\w .'-]")
+_KG_MAX_LENGTH = 128
+_KG_ALLOWED_DESCRIPTION = (
+    "Unicode alphanumerics, underscore, space, dot, apostrophe, and hyphen. "
+    "First and last character must be alphanumeric. "
+    f"Max {_KG_MAX_LENGTH} characters."
+)
+
+
+def _kg_validation_response(error: str, submitted: dict[str, str]) -> JSONResponse:
+    """Enrich a sanitize_name 400 with field/value/allowed_pattern.
+
+    `submitted` maps field name -> raw submitted value so the caller can see
+    which value was rejected without parsing the error string. Errors not
+    matching any known pattern fall through with just `detail`.
+    """
+    body: dict[str, object] = {"detail": error}
+    for field_name, value in submitted.items():
+        if not error.startswith(f"{field_name} "):
+            continue
+        body["field"] = field_name
+        body["value"] = value
+        if "contains invalid characters" in error:
+            body["allowed_pattern"] = _KG_ALLOWED_PATTERN
+            body["allowed_description"] = _KG_ALLOWED_DESCRIPTION
+            disallowed = sorted({c for c in value if not _KG_ALLOWED_CHAR_RE.match(c)})
+            if disallowed:
+                body["invalid_chars"] = disallowed
+        elif "exceeds maximum length" in error:
+            body["max_length"] = _KG_MAX_LENGTH
+        break
+    return JSONResponse(status_code=400, content=body)
+
 
 class KGFactRequest(BaseModel):
     subject: str
@@ -592,7 +630,10 @@ def kg_add_fact(req: KGFactRequest):
         kwargs["source_closet"] = req.source_closet
     result = tool_kg_add(**kwargs)
     if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+        return _kg_validation_response(
+            result.get("error", "Unknown error"),
+            {"subject": req.subject, "predicate": req.predicate, "object": req.object},
+        )
     return result
 
 
@@ -603,7 +644,10 @@ def kg_invalidate(req: KGInvalidateRequest):
         kwargs["ended"] = req.ended
     result = tool_kg_invalidate(**kwargs)
     if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+        return _kg_validation_response(
+            result.get("error", "Unknown error"),
+            {"subject": req.subject, "predicate": req.predicate, "object": req.object},
+        )
     return result
 
 

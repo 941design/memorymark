@@ -315,6 +315,58 @@ in the bridge's WAL and appears in the SSE stream.
 
 ## Knowledge Graph
 
+### Identifier validation
+
+The `entity` parameter on `GET /api/kg/query` and the `subject`, `predicate`,
+and `object` fields on `POST /api/kg/facts` and `POST /api/kg/invalidate`
+are validated identically before the palace writes or reads a triple.
+
+**Rule:**
+
+```
+^(?:[^\W_]|[^\W_][\w .'-]{0,126}[^\W_])$
+```
+
+- **Allowed characters:** Unicode alphanumerics (`\w` minus `_`), underscore,
+  space (` `), dot (`.`), apostrophe (`'`), and hyphen (`-`).
+- **Boundary constraint:** the first and last character must be alphanumeric
+  (not `_`, space, `.`, `'`, or `-`).
+- **Max length:** 128 characters (checked before the regex; length failures
+  return a distinct error).
+- **Explicitly rejected:** `:`, `/`, `\`, `#`, `%`, `,`, `+`, `?`, `@`, `=`,
+  `&`, `"`, `;`, `..`, null bytes, and any other punctuation not in the
+  allowed set.
+
+Clients that need to namespace triples (e.g. separate opinion-anchored facts
+from entity-anchored facts) should encode the namespace with an allowed
+separator such as `_` or `-` rather than `:`. For example, use
+`opinion_<id>` instead of `opinion:<id>`.
+
+**Error response (400):**
+
+```json
+{
+  "detail": "subject contains invalid characters",
+  "field": "subject",
+  "value": "opinion:abc_123",
+  "allowed_pattern": "^(?:[^\\W_]|[^\\W_][\\w .'-]{0,126}[^\\W_])$",
+  "allowed_description": "Unicode alphanumerics, underscore, space, dot, apostrophe, and hyphen. First and last character must be alphanumeric. Max 128 characters.",
+  "invalid_chars": [":"]
+}
+```
+
+Fields on the error body:
+
+| Field                 | Present when                                                  |
+|-----------------------|---------------------------------------------------------------|
+| `detail`              | Always — the terse message from the palace.                   |
+| `field`               | The request field that failed (`subject`, `predicate`, `object`, `entity`). |
+| `value`               | The exact value the caller submitted, echoed back.            |
+| `allowed_pattern`     | Present for "contains invalid characters" failures.           |
+| `allowed_description` | Plain-language version of `allowed_pattern`.                  |
+| `invalid_chars`       | Sorted list of individual characters rejected (when any exist).|
+| `max_length`          | Present for "exceeds maximum length" failures.                |
+
 ### `GET /api/kg/query`
 
 Query the knowledge graph for an entity's relationships. Returns typed facts
@@ -322,7 +374,7 @@ with temporal validity.
 
 | Parameter   | Type   | Required | Description                                        |
 |-------------|--------|----------|----------------------------------------------------|
-| `entity`    | string | **yes**  | Entity to query (e.g. `Alice`, `MyProject`)        |
+| `entity`    | string | **yes**  | Entity to query (e.g. `Alice`, `MyProject`). See [Identifier validation](#identifier-validation). |
 | `as_of`     | string | no       | Only facts valid at this date (`YYYY-MM-DD`)       |
 | `direction` | string | no       | `outgoing`, `incoming`, or `both` (default `both`) |
 
@@ -352,7 +404,9 @@ with temporal validity.
 
 ### `POST /api/kg/facts`
 
-Add a fact triple to the knowledge graph.
+Add a fact triple to the knowledge graph. `subject`, `predicate`, and
+`object` must match the rule in [Identifier validation](#identifier-validation);
+violations return a structured 400.
 
 **Request body:**
 
@@ -377,7 +431,9 @@ Add a fact triple to the knowledge graph.
 
 ### `POST /api/kg/invalidate`
 
-Mark a fact as no longer true (e.g. job ended, moved house).
+Mark a fact as no longer true (e.g. job ended, moved house). `subject`,
+`predicate`, and `object` follow the same rule as
+[`POST /api/kg/facts`](#post-apikgfacts).
 
 **Request body:**
 
