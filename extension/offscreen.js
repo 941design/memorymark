@@ -389,9 +389,11 @@ async function handleChat(userMessage, tabId, sourceUrl) {
 
   // Show search metadata in chat
   if (hits.length > 0) {
-    const sources = hits.map(r =>
-      `${r.source_file || 'unknown'} (${r.wing}/${r.room}, ${Math.round((r.similarity || 0) * 100)}%)`
-    ).join(', ');
+    const sources = hits.map(r => {
+      const meta = r.metadata || {};
+      const label = meta.title || meta.source_url || 'unknown';
+      return `${label} (${r.wing}/${r.room}, distance ${r.distance})`;
+    }).join(', ');
     sendChatResponse(tabId, {
       text: '', done: false,
       toolCall: `Found ${hits.length} page(s): ${sources}`
@@ -406,10 +408,12 @@ async function handleChat(userMessage, tabId, sourceUrl) {
   let contextBlock = '';
   if (hits.length > 0) {
     contextBlock = '\n\nRelevant saved pages:\n' +
-      hits.map((r, i) =>
-        `[${i + 1}] "${r.source_file || 'unknown'}" (${r.wing}/${r.room}, similarity: ${r.similarity})\n` +
-        `${(r.text || '').substring(0, 1500)}`
-      ).join('\n\n');
+      hits.map((r, i) => {
+        const meta = r.metadata || {};
+        const label = meta.title || meta.source_url || 'unknown';
+        return `[${i + 1}] "${label}" (${r.wing}/${r.room}, distance: ${r.distance})\n` +
+          `${(r.content || '').substring(0, 1500)}`;
+      }).join('\n\n');
   }
 
   let contextHint = '';

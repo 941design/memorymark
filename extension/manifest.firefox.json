@@ -9,7 +9,7 @@
       "strict_min_version": "109.0"
     }
   },
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "tabs", "storage", "scripting"],
   "host_permissions": ["http://localhost:21517/*"],
   "action": {
     "default_title": "MemoryMark",
@@ -40,6 +40,10 @@
     "capture-page": {
       "suggested_key": { "default": "Ctrl+Shift+M", "mac": "Command+Shift+M" },
       "description": "Capture current page to MemPalace"
+    },
+    "toggle-chat": {
+      "suggested_key": { "default": "Ctrl+Shift+L", "mac": "Command+Shift+L" },
+      "description": "Open or close MemoryMark chat"
     }
   },
   "icons": {

@@ -31,13 +31,19 @@ async function ensureOffscreenDocument() {
     return;
   }
 
-  offscreenCreating = chrome.offscreen.createDocument({
-    url: 'offscreen.html',
-    reasons: ['WORKERS'],
-    justification: 'Run Gemma LLM inference via WebGPU'
-  });
-  await offscreenCreating;
-  offscreenCreating = null;
+  // Reset offscreenCreating in finally so a single rejection doesn't pin a
+  // failed promise for the rest of the service-worker lifetime — every later
+  // call would otherwise re-throw the same error and Gemma would stay dead.
+  try {
+    offscreenCreating = chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['WORKERS'],
+      justification: 'Run Gemma LLM inference via WebGPU'
+    });
+    await offscreenCreating;
+  } finally {
+    offscreenCreating = null;
+  }
 }
 
 function isGemmaSupported() {
@@ -232,18 +238,18 @@ async function triggerToggleChat() {
   }
 }
 
-// --- Standalone chat tab tracking ---
+// --- Standalone chat routing ---
+//
+// Standalone chat lives in chat.html (an extension page). Its messages arrive
+// without a sender.tab, so we use the literal "standalone" as a routing token
+// instead of a numeric tabId. sendToChat broadcasts via chrome.runtime for
+// that token (extension pages do not receive chrome.tabs.sendMessage).
 
-const standaloneChatTabs = new Set();
-
-chrome.tabs.onRemoved.addListener((tabId) => {
-  standaloneChatTabs.delete(tabId);
-});
+const STANDALONE_TAB_ID = 'standalone';
 
 function sendToChat(tabId, message) {
   if (!tabId) return;
-  if (standaloneChatTabs.has(tabId)) {
-    // Extension pages receive via chrome.runtime, not chrome.tabs
+  if (tabId === STANDALONE_TAB_ID) {
     chrome.runtime.sendMessage(message);
   } else {
     chrome.tabs.sendMessage(tabId, message);
@@ -359,14 +365,11 @@ function handleOffscreenStatus(message) {
 // --- Slash command handling ---
 
 async function handleChatMessage(message, sender) {
-  const tabId = sender.tab?.id;
+  // Standalone chat (chat.html) has no sender.tab; route via the sentinel
+  // so sendToChat broadcasts back to the extension page.
+  const tabId = message.standalone ? STANDALONE_TAB_ID : sender.tab?.id;
   const text = (message.message || '').trim();
   const sourceUrl = message.sourceUrl || '';
-
-  // Track standalone chat tabs for correct response routing
-  if (message.standalone && tabId) {
-    standaloneChatTabs.add(tabId);
-  }
 
   try {
     // Handle slash commands directly (no Gemma needed)
@@ -490,10 +493,11 @@ async function handleSearch(bridgeUrl, tabId, query) {
 
     let text = 'Found ' + results.length + ' result(s) for "' + query + '":\n\n';
     results.forEach((r, i) => {
-      const source = r.source_file || 'unknown';
+      const meta = r.metadata || {};
+      const source = meta.title || meta.source_url || 'unknown';
       text += (i + 1) + '. ' + (r.wing || '?') + '/' + (r.room || '?') +
-              ' — ' + source + ' (similarity: ' + r.similarity + ')\n';
-      const preview = (r.text || '').substring(0, 150).replace(/\n/g, ' ');
+              ' — ' + source + ' (distance: ' + r.distance + ')\n';
+      const preview = (r.content || '').substring(0, 150).replace(/\n/g, ' ');
       if (preview) text += '   ' + preview + '...\n';
       text += '\n';
     });
@@ -582,6 +586,21 @@ async function executeToolCall(toolName, args) {
   }
 }
 
+async function bridgeErrorMessage(resp) {
+  let detail = '';
+  try {
+    const body = await resp.json();
+    if (body && typeof body.detail === 'string') {
+      detail = body.detail;
+    } else if (body) {
+      detail = JSON.stringify(body);
+    }
+  } catch {
+    try { detail = await resp.text(); } catch { /* ignore */ }
+  }
+  return 'Bridge returned ' + resp.status + (detail ? ': ' + detail : '');
+}
+
 async function handleExtractResult(message, sender) {
   const bridgeUrl = await getBridgeUrl();
 
@@ -589,7 +608,7 @@ async function handleExtractResult(message, sender) {
     const checkUrl = bridgeUrl + '/api/drawers/by-url?url=' + encodeURIComponent(message.data.source_url);
     const checkResp = await fetch(checkUrl);
 
-    if (!checkResp.ok) throw new Error('Bridge returned ' + checkResp.status);
+    if (!checkResp.ok) throw new Error(await bridgeErrorMessage(checkResp));
 
     const checkData = await checkResp.json();
 
@@ -617,7 +636,7 @@ async function handleExtractResult(message, sender) {
       })
     });
 
-    if (!saveResp.ok) throw new Error('Bridge returned ' + saveResp.status);
+    if (!saveResp.ok) throw new Error(await bridgeErrorMessage(saveResp));
 
     const saveData = await saveResp.json();
     chrome.tabs.sendMessage(sender.tab.id, {
