@@ -433,7 +433,13 @@ def drawers_by_url(url: str = Query(...), include_content: bool = Query(False)):
     includes = ["metadatas"]
     if include_content:
         includes.append("documents")
-    results = col.get(where={"source_url": url}, include=includes)
+    # Drawers created via the bridge store provenance in source_url; drawers
+    # created via MemPalace's native MCP add_drawer tool only set source_file.
+    # Match either so the unified-palace contract holds across writers.
+    results = col.get(
+        where={"$or": [{"source_url": url}, {"source_file": url}]},
+        include=includes,
+    )
     if results and results["ids"]:
         meta = results["metadatas"][0]
         resp = {

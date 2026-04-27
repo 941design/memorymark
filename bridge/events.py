@@ -186,8 +186,20 @@ def replay_from_timestamp(since_ts: str) -> list[dict[str, Any]]:
     if buf and buf[0].get("data", {}).get("timestamp", "") >= since_ts:
         # Entire ring buffer is within range — serve from buffer only
         return [e for e in buf if e.get("data", {}).get("timestamp", "") >= since_ts]
-    # Need WAL scan — may include events older than ring buffer
-    return _scan_wal_by_timestamp(str(_mp._WAL_FILE), since_ts)
+    # Need WAL scan — may include events older than ring buffer.
+    # The scan numbers events by WAL line_number, which can diverge from
+    # _global_seq after a truncation resets the file but not the counter.
+    # Re-anchor the replayed ids onto the current sequence so a client's
+    # Last-Event-ID after timestamp replay still maps cleanly into the
+    # ring buffer on subsequent reconnects (avoids spurious cursor-stale
+    # frames and id-collision duplicates).
+    results = _scan_wal_by_timestamp(str(_mp._WAL_FILE), since_ts)
+    if results:
+        last_seq = _global_seq
+        n = len(results)
+        for i, event in enumerate(results):
+            event["id"] = last_seq - n + 1 + i
+    return results
 
 
 

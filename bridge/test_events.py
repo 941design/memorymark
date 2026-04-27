@@ -867,6 +867,39 @@ def test_overrun_frame_emitted_on_queue_overflow():
     ev.unsubscribe(q)
 
 
+def test_replay_from_timestamp_aligns_ids_with_global_seq(tmp_path, monkeypatch):
+    """Regression: WAL-fallback timestamp replay must anchor event ids to the
+    live _global_seq counter, not the raw WAL line_number. After a WAL truncation
+    line numbers reset but _global_seq does not, so a client reconnecting via
+    since_timestamp would otherwise receive ids far behind the ring buffer's
+    real cursor and immediately hit cursor-stale on its next reconnect.
+    """
+    wal_file = tmp_path / "wal.jsonl"
+    monkeypatch.setattr(_mp, "_WAL_FILE", wal_file)
+
+    # Simulate post-truncation state: _global_seq is well ahead of the WAL's
+    # current line count.
+    ev._global_seq = 150
+    entries = [
+        {"timestamp": f"2026-04-15T10:0{i}:00.000000", "operation": "add_drawer", "params": {}}
+        for i in range(5)
+    ]
+    with open(wal_file, "w", encoding="utf-8") as fh:
+        for e in entries:
+            fh.write(json.dumps(e) + "\n")
+
+    # Ring buffer is empty so timestamp replay falls through to the WAL scan.
+    assert len(ev._ring_buffer) == 0
+    results = ev.replay_from_timestamp("2026-04-15T10:00:00.000000")
+
+    assert len(results) == 5
+    ids = [r["id"] for r in results]
+    # IDs must be strictly increasing and end at the current _global_seq so the
+    # client's Last-Event-ID after replay is a valid cursor for the ring buffer.
+    assert ids == [146, 147, 148, 149, 150]
+    assert ids[-1] == ev._global_seq
+
+
 # ---------------------------------------------------------------------------
 # Story p1 / AC-P06: Truncation-recovery regression test
 # ---------------------------------------------------------------------------

@@ -177,6 +177,31 @@ def test_by_url_omits_content_by_default(client):
     assert "content" not in data
 
 
+def test_by_url_finds_mcp_created_drawer(client):
+    """Regression: /api/drawers/by-url must find drawers added through the MCP
+    add_drawer tool, which only persists provenance in source_file (not
+    source_url). Without an OR query, MCP-created drawers stay invisible to
+    duplicate detection, /summarize, and get_page_content.
+    """
+    from mempalace.mcp_server import tool_add_drawer
+
+    url = "https://example.com/mcp-created"
+    result = tool_add_drawer(
+        wing="Web",
+        room="Captures",
+        content="# MCP\n\nBody",
+        source_file=url,
+        added_by="mcp",
+    )
+    assert result["success"] is True
+
+    resp = client.get("/api/drawers/by-url", params={"url": url})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["exists"] is True
+    assert data["drawer_id"] == result["drawer_id"]
+
+
 def test_get_drawer_by_id(client):
     ids = _seed_drawers(client)
     resp = client.get(f"/api/drawers/{ids[0]}")

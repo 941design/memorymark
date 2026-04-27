@@ -401,14 +401,6 @@
       }
     }
 
-    // Truncate if too long
-    const MAX_LENGTH = 100000;
-    let truncated = false;
-    if (markdown.length > MAX_LENGTH) {
-      markdown = markdown.substring(0, MAX_LENGTH);
-      truncated = true;
-    }
-
     // Compose final content with header
     const authorDate = [
       metadata.author ? 'Author: ' + metadata.author : '',
@@ -421,6 +413,16 @@
       content += '> ' + authorDate + '\n';
     }
     content += '\n' + markdown;
+
+    // Truncate the assembled payload (header + body) to the bridge's content
+    // limit. Truncating only the body before prepending the header pushed
+    // long pages (e.g. arXiv HTML) past 100000 chars and produced a 400.
+    const MAX_LENGTH = 100000;
+    let truncated = false;
+    if (content.length > MAX_LENGTH) {
+      content = content.substring(0, MAX_LENGTH);
+      truncated = true;
+    }
 
     return {
       content: content,

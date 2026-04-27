@@ -428,6 +428,10 @@ async function handleSummarize(bridgeUrl, tabId, sourceUrl) {
     const resp = await fetch(
       bridgeUrl + '/api/drawers/by-url?url=' + encodeURIComponent(sourceUrl)
     );
+    if (!resp.ok) {
+      sendDirectChat(tabId, await bridgeErrorMessage(resp), true);
+      return;
+    }
     const data = await resp.json();
 
     if (!data.exists) {
@@ -483,6 +487,10 @@ async function handleSearch(bridgeUrl, tabId, query) {
     const resp = await fetch(
       bridgeUrl + '/api/search?query=' + encodeURIComponent(query) + '&limit=10'
     );
+    if (!resp.ok) {
+      sendDirectChat(tabId, await bridgeErrorMessage(resp), true);
+      return;
+    }
     const data = await resp.json();
     const results = data.results || [];
 
@@ -511,6 +519,10 @@ async function handleSearch(bridgeUrl, tabId, query) {
 async function handleStatus(bridgeUrl, tabId) {
   try {
     const resp = await fetch(bridgeUrl + '/api/status');
+    if (!resp.ok) {
+      sendDirectChat(tabId, await bridgeErrorMessage(resp), true);
+      return;
+    }
     const data = await resp.json();
 
     let text = 'MemPalace Status:\n';
@@ -557,6 +569,9 @@ async function executeToolCall(toolName, args) {
           bridgeUrl + '/api/search?query=' + encodeURIComponent(args.query || '') +
           '&limit=' + (args.limit || 5)
         );
+        if (!resp.ok) {
+          return { error: await bridgeErrorMessage(resp) };
+        }
         result = await resp.json();
         break;
       }
@@ -565,6 +580,9 @@ async function executeToolCall(toolName, args) {
           bridgeUrl + '/api/drawers/by-url?url=' + encodeURIComponent(args.url || '') +
           '&include_content=true'
         );
+        if (!lookupResp.ok) {
+          return { error: await bridgeErrorMessage(lookupResp) };
+        }
         const lookupData = await lookupResp.json();
         if (!lookupData.exists) {
           result = { error: 'No saved page found for that URL.' };
