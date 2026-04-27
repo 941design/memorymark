@@ -188,6 +188,49 @@ def test_create_drawer_defaults_added_by_to_memorymark(client):
     assert full["added_by"] == "memorymark"
 
 
+def test_create_drawer_rejects_oversized_content(client):
+    """Regression: content over 100_000 chars → 400 (sanitize_content limit).
+
+    This is the real failure mode captured pages like arxiv HTML hit: the
+    extension truncates its markdown to exactly 100_000, then prepends a
+    title/source header, pushing the payload past the bridge's cap.
+    """
+    oversized = "x" * 100_001
+    resp = client.post("/api/drawers", json={
+        "wing": "Web",
+        "room": "Captures",
+        "content": oversized,
+    })
+    assert resp.status_code == 400
+    assert "maximum length" in resp.json()["detail"]
+
+
+def test_create_drawer_accepts_url_with_dots_in_path(client):
+    """Regression: dots in source_url path (e.g. arxiv IDs like 2604.14228v1)
+    must not trigger a 400. URLs are stored verbatim in metadata — only wing/
+    room go through sanitize_name, so path-dots are a red herring."""
+    url = "https://arxiv.org/html/2604.14228v1"
+    resp = client.post("/api/drawers", json={
+        "wing": "Web",
+        "room": "Captures",
+        "content": f"# Paper\n\n> Source: {url}\n\nbody text",
+        "metadata": {
+            "source_url": url,
+            "title": "Paper",
+            "timestamp": "2026-04-20T00:00:00Z",
+        },
+    })
+    assert resp.status_code == 201, resp.text
+    drawer_id = resp.json()["drawer_id"]
+
+    by_url = client.get("/api/drawers/by-url", params={"url": url}).json()
+    assert by_url["exists"] is True
+    assert by_url["drawer_id"] == drawer_id
+
+    full = client.get(f"/api/drawers/{drawer_id}").json()
+    assert full["metadata"]["source_url"] == url
+
+
 def test_update_drawer_preserves_creator_provenance(client):
     """PUT /api/drawers/{id} must keep original added_by after an update."""
     create = client.post("/api/drawers", json={
