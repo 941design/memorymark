@@ -20,3 +20,12 @@ dev-dependencies = [
     "pytest",
     "httpx",
 ]
+
+[tool.pytest.ini_options]
+# Silence DeprecationWarnings emitted from inside uvicorn's import of the
+# legacy `websockets` server module — they are upstream-owned and can't be
+# fixed here. Scoped narrowly so warnings from our own code still surface.
+filterwarnings = [
+    "ignore:websockets\\.legacy is deprecated.*:DeprecationWarning:websockets.legacy",
+    "ignore:websockets\\.server\\.WebSocketServerProtocol is deprecated.*:DeprecationWarning:uvicorn.protocols.websockets.websockets_impl",
+]

@@ -39,8 +39,16 @@ def _make_entry(operation: str = "add_drawer", **params) -> dict:
 
 
 def _run(coro):
-    """Run a coroutine in a new event loop (tests are sync)."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Run a coroutine in a fresh event loop (tests are sync).
+
+    Use new_event_loop() instead of get_event_loop() so we don't trip the
+    "There is no current event loop" DeprecationWarning on Python 3.12+.
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 # ---------------------------------------------------------------------------
