@@ -31,6 +31,7 @@ from mempalace.mcp_server import (
     tool_kg_add,
     tool_kg_invalidate,
     tool_kg_query,
+    tool_list_drawers,
     tool_list_rooms,
     tool_list_wings,
     tool_status,
@@ -422,6 +423,21 @@ def rooms(wing: str | None = Query(None)):
     result = tool_list_rooms(wing=wing)
     if "error" in result and "rooms" not in result:
         return {"wing": wing or "all", "rooms": {}}
+    return result
+
+
+@app.get("/api/drawers")
+def list_drawers(
+    wing: str | None = Query(None),
+    room: str | None = Query(None),
+    limit: int = Query(20),
+    offset: int = Query(0),
+):
+    result = tool_list_drawers(wing=wing, room=room, limit=limit, offset=offset)
+    if "error" in result:
+        if result["error"].startswith("No palace found"):
+            return {"drawers": [], "count": 0, "offset": offset, "limit": limit}
+        raise HTTPException(status_code=400, detail=result["error"])
     return result
 
 

@@ -238,6 +238,70 @@ def test_get_drawer_not_found(client):
     assert resp.status_code == 404
 
 
+def test_list_drawers_returns_all(client):
+    ids = _seed_drawers(client)
+    resp = client.get("/api/drawers")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "drawers" in data
+    assert len(data["drawers"]) == 3
+    assert data["count"] == 3
+
+
+def test_list_drawers_filters_by_wing(client):
+    _seed_drawers(client)
+    resp = client.get("/api/drawers", params={"wing": "Web"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["drawers"]) == 2
+    for d in data["drawers"]:
+        assert d["wing"] == "Web"
+
+
+def test_list_drawers_filters_by_room(client):
+    _seed_drawers(client)
+    resp = client.get("/api/drawers", params={"room": "Captures"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["drawers"]) == 1
+    assert data["drawers"][0]["room"] == "Captures"
+
+
+def test_list_drawers_filters_by_wing_and_room(client):
+    _seed_drawers(client)
+    resp = client.get("/api/drawers", params={"wing": "Web", "room": "Captures"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["drawers"]) == 1
+    assert data["drawers"][0]["wing"] == "Web"
+    assert data["drawers"][0]["room"] == "Captures"
+
+
+def test_list_drawers_empty_palace(client):
+    resp = client.get("/api/drawers")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["drawers"] == []
+    assert data["count"] == 0
+
+
+def test_list_drawers_contract(client):
+    """GET /api/drawers must return per-drawer drawer_id, wing, room, content_preview."""
+    ids = _seed_drawers(client)
+    resp = client.get("/api/drawers")
+    assert resp.status_code == 200
+    data = resp.json()
+    drawers = data["drawers"]
+    assert len(drawers) >= 1
+    first = drawers[0]
+    for key in ("drawer_id", "wing", "room", "content_preview"):
+        assert key in first, f"missing key: {key}"
+    assert first["drawer_id"] == ids[0]
+    assert first["wing"] == "Web"
+    assert first["room"] == "Captures"
+    assert "Python Tutorial" in first["content_preview"]
+
+
 def test_search_result_contract(client):
     """GET /api/search must return per-result drawer_id, content, metadata,
     distance, wing, room, added_by."""
