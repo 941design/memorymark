@@ -1,0 +1,43 @@
+{
+  "version": 3,
+  "updated_at": "2026-07-30T12:26:55Z",
+  "epics": [
+    {
+      "path": "specs/epic-docker-bridge/",
+      "status": "DONE",
+      "next_action": "seeded by /base:backlog init 2026-07-30"
+    },
+    {
+      "path": "specs/epic-dom-extraction/",
+      "status": "DONE",
+      "next_action": "seeded by /base:backlog init 2026-07-30"
+    },
+    {
+      "path": "specs/epic-sse-drawer-events/",
+      "status": "DONE",
+      "next_action": "seeded by /base:backlog init 2026-07-30"
+    },
+    {
+      "path": "specs/epic-sse-drawer-events-p1/",
+      "status": "DONE",
+      "next_action": "seeded by /base:backlog init 2026-07-30"
+    }
+  ],
+  "findings": [
+    {
+      "slug": "move-palace-out-repo-home-mempalace",
+      "scope": "any",
+      "anchor": {
+        "path": "Makefile",
+        "line": 12
+      },
+      "text": "Move the palace out of the repo to $HOME/.mempalace/palace and default PALACE_PATH there",
+      "created_at": "2026-07-30",
+      "motivation": "The palace currently lives inside the working tree at ./data/mempalace, which is an artifact of how the Docker deployment bind-mounts it rather than a deliberate choice. That couples 555MB of irreplaceable user data to a checkout: it is duplicated per clone, it sits under a host/VM shared mount (which already produced two concurrent writers against one ChromaDB SQLite file), and any repo-level cleanup or re-clone endangers it. $HOME/.mempalace/palace is MemPalace's own default and the conventional home for user data.",
+      "behavior": "docker-compose.yml:7 bind-mounts ./data/mempalace into the container, and Makefile:12 defaults PALACE_PATH to $(CURDIR)/data/mempalace, so the launchd unit exports MEMPALACE_PALACE_PATH pointing back into the repo. MemPalace's own default location is never used, and the repo-local path is load-bearing for both deployment modes.",
+      "approach": "Relocate the store to $HOME/.mempalace/palace, flip the Makefile PALACE_PATH default, and repoint or drop the docker-compose volume so both supervisors agree. Add a one-shot migration step that stops every writer first and refuses to proceed if the destination is already a non-empty palace, so the move cannot silently merge or clobber two stores. Keep PALACE_PATH overridable for anyone who wants the old layout.",
+      "success_signal": "mempalace_status reports palace_path under $HOME/.mempalace/palace with the full drawer count intact, and a fresh clone of the repo contains no palace data."
+    }
+  ],
+  "archive": []
+}

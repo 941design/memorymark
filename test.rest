@@ -55,11 +55,6 @@ Content-Type: application/json
 }
 
 #
-# Delete drawer
-#
-DELETE :base-url/api/drawers/:drawer-id
-
-#
 # Search
 #
 GET :base-url/api/search?query=:search-query&limit=5
@@ -93,6 +88,11 @@ GET :base-url/api/rooms?wing=Web
 # Drawers in a wing/room
 #
 GET :base-url/api/drawers?wing=Web&room=Captures&limit=20
+
+#
+# Drawers in a wing/room
+#
+GET :base-url/api/drawers?wing=Opinions&limit=100
 
 #
 # Get drawer by ID

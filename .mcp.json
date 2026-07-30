@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "memorymark": {
+      "type": "http",
+      "url": "http://host.lima.internal:21517/mcp"
+    },
+    "daydreamer-project": {
+      "type": "http",
+      "url": "http://host.lima.internal:7433/daydreamer/mcp"
+    },
+    "imap-mcp-project": {
+      "type": "http",
+      "url": "http://host.lima.internal:7433/imap-mcp/mcp"
+    }
+  }
+}
