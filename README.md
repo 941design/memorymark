@@ -50,6 +50,9 @@ make up
 
 This runs the FastAPI bridge on `localhost:21517` wrapping MemPalace in Docker.
 
+On macOS you can instead have it start at login under launchd — see
+[Running as a launchd agent](#running-as-a-launchd-agent-macos).
+
 ### 2. Load the extension
 
 **Chrome:**
@@ -113,13 +116,66 @@ memorymark/
 | `make logs` | Tail bridge logs |
 | `make build` | Rebuild the Docker image |
 | `make dev` | Run bridge locally without Docker (requires uv) |
-| `make test` | Run bridge test suite (44 tests) |
+| `make install` | Install + start the bridge as a launchd agent (macOS) |
+| `make uninstall` | Stop and remove the launchd agent |
+| `make launchd-status` | Show launchd agent state and bridge health |
+| `make launchd-logs` | Tail the launchd agent logs |
+| `make launchd-plist` | Print the generated plist without installing it |
+| `make test` | Run bridge test suite |
 | `make ext-chrome` | Package Chrome extension zip |
 | `make ext-firefox` | Package Firefox extension zip |
 | `make ext-all` | Build both extension zips |
 | `make events` | Tail SSE event stream (requires curl + jq) |
 | `make clean` | Remove build artifacts |
 | `make help` | Show all available targets |
+
+## Running as a launchd agent (macOS)
+
+`make up` is Docker-supervised: the container comes back after a crash
+(`restart: unless-stopped`), but only once the Docker daemon itself is running.
+For a bridge that starts at login and is supervised directly by the OS, install
+it as a launchd user agent instead:
+
+```bash
+make down      # free port 21517 -- launchd and Docker cannot both serve the bridge
+make install
+```
+
+This runs the bridge **natively** (no Docker) as
+`design.941.memorymark.bridge`, with `RunAtLoad` and `KeepAlive` so launchd
+starts it at login and restarts it on crash.
+
+| | |
+|---|---|
+| Plist | `~/Library/LaunchAgents/design.941.memorymark.bridge.plist` |
+| Logs | `~/Library/Logs/memorymark/bridge.{out,err}.log` |
+| Palace | `./data/mempalace` (same directory Docker bind-mounts) |
+| Command | `uv run --frozen uvicorn server:app` in `bridge/` |
+
+The plist is generated, not checked in — every meaningful key (uv path, working
+directory, palace location) is absolute and machine-specific. Inspect it before
+installing with `make launchd-plist`.
+
+**The palace path is explicit and deliberate.** The agent sets
+`MEMPALACE_PALACE_PATH=./data/mempalace`; without it, MemPalace would resolve
+its own default of `~/.mempalace/palace` and the bridge would come up against
+an empty store. To serve a palace elsewhere:
+
+```bash
+make install PALACE_PATH="$HOME/.mempalace/palace"
+```
+
+Other overridable variables: `BRIDGE_HOST`, `BRIDGE_PORT`, `LOG_DIR`,
+`LAUNCHD_LABEL`, `LAUNCH_AGENTS_DIR`.
+
+Check on it with `make launchd-status`, follow output with `make launchd-logs`,
+and remove it with `make uninstall` (which leaves the palace untouched).
+Switching back to Docker is `make uninstall && make up`.
+
+> **If you also develop inside a Linux VM that mounts this repo**, note that the
+> host and the VM share one `bridge/.venv`. Whichever platform ran `uv` last
+> owns it; the other will transparently rebuild it on the next `uv run`/`uv
+> sync`. Harmless, but it makes the first command after switching platforms slow.
 
 ## Bridge API
 
