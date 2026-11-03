@@ -85,6 +85,7 @@ Content format stored in MemPalace:
 ```
 
 Content is capped at 200,000 characters; oversized pages are truncated with a warning.
+Search covers the full text of every drawer via the bridge's passage index (see `specs/passage-index-spec.md`).
 
 ### 3.2 Duplicate Detection
 

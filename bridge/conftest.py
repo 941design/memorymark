@@ -10,6 +10,12 @@ def isolated_palace(tmp_path, monkeypatch):
     palace_path = str(tmp_path / "palace")
     os.makedirs(palace_path, exist_ok=True)
     monkeypatch.setenv("MEMPALACE_PALACE_PATH", palace_path)
+    # The passage index lives inside the palace dir by default; never run the
+    # background start-up reconcile in tests (they call reconcile explicitly).
+    monkeypatch.delenv("MEMORYMARK_INDEX_PATH", raising=False)
+    monkeypatch.setenv("MEMORYMARK_RECONCILE_ON_START", "0")
+    import passages
+    passages.reset_index()
 
     # Redirect WAL to temp directory (module-level constant, must monkeypatch)
     wal_dir = tmp_path / "wal"
@@ -40,6 +46,7 @@ def isolated_palace(tmp_path, monkeypatch):
 
     yield palace_path
 
+    passages.reset_index()
     chromadb.api.client.SharedSystemClient.clear_system_cache()
     mcp._client_cache = None
     mcp._collection_cache = None

@@ -485,7 +485,7 @@ async function handleSearch(bridgeUrl, tabId, query) {
 
   try {
     const resp = await fetch(
-      bridgeUrl + '/api/search?query=' + encodeURIComponent(query) + '&limit=10'
+      bridgeUrl + '/api/search?query=' + encodeURIComponent(query) + '&limit=10&include_content=false'
     );
     if (!resp.ok) {
       sendDirectChat(tabId, await bridgeErrorMessage(resp), true);
@@ -505,7 +505,7 @@ async function handleSearch(bridgeUrl, tabId, query) {
       const source = meta.title || meta.source_url || 'unknown';
       text += (i + 1) + '. ' + (r.wing || '?') + '/' + (r.room || '?') +
               ' — ' + source + ' (distance: ' + r.distance + ')\n';
-      const preview = (r.content || '').substring(0, 150).replace(/\n/g, ' ');
+      const preview = (r.passage || r.content || '').substring(0, 150).replace(/\n/g, ' ');
       if (preview) text += '   ' + preview + '...\n';
       text += '\n';
     });
@@ -567,7 +567,7 @@ async function executeToolCall(toolName, args) {
       case 'search_memory': {
         const resp = await fetch(
           bridgeUrl + '/api/search?query=' + encodeURIComponent(args.query || '') +
-          '&limit=' + (args.limit || 5)
+          '&limit=' + (args.limit || 5) + '&include_content=false'
         );
         if (!resp.ok) {
           return { error: await bridgeErrorMessage(resp) };

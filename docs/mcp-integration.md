@@ -141,7 +141,10 @@ Palace graph overview: total rooms, tunnel connections, edges between wings.
 
 #### `mempalace_search`
 
-Semantic search. Returns verbatim drawer content with similarity scores.
+Semantic search over every passage of every drawer, **one hit per drawer**.
+The bridge replaces MemPalace's article-level search (which only embeds a
+drawer's first ~256 tokens) with its passage index, so text deep inside long
+drawers is found. See `docs/rest-api.md` → "Passage index".
 
 | Parameter      | Type    | Required | Description                                                                       |
 |----------------|---------|----------|-----------------------------------------------------------------------------------|
@@ -152,7 +155,16 @@ Semantic search. Returns verbatim drawer content with similarity scores.
 | `max_distance` | number  | no       | Max cosine distance threshold (0=identical, 2=opposite). Default 1.5. Set 0 to disable. |
 | `context`      | string  | no       | Background context (not used for embedding --- reserved for future re-ranking)    |
 
-**Returns:** array of results, each with `id`, `content`, `metadata`, and `distance`.
+**Returns:** `{query, filters, index, results}`. Each result has `drawer_id`,
+`text` (the best-matching passage — not the full drawer; fetch that with
+`mempalace_get_drawer`), `wing`, `room`, `source_file`, `source_url`, `title`,
+`matched_passages`, `similarity` and `distance` (of the best passage). `index`
+is `"passages"`, or `"articles"` while the passage index is still empty.
+
+Writes through `mempalace_add_drawer`, `mempalace_update_drawer`,
+`mempalace_delete_drawer` and `mempalace_diary_write` keep the passage index in
+sync. Counts (`mempalace_status`, `mempalace_list_wings`, …) are drawers, not
+passages.
 
 ---
 

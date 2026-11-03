@@ -172,3 +172,60 @@ def test_mcp_add_drawer_uses_bridge_content_cap(client):
     too_big = json.loads(_add_drawer_via_mcp(client, "z" * (MAX_CONTENT_LENGTH + 1)))
     assert too_big.get("success") is not True
     assert "maximum length" in json.dumps(too_big)
+
+
+def _call(client, name, arguments, rid=20):
+    _rpc(client, INITIALIZE)
+    data = _rpc(client, {
+        "jsonrpc": "2.0", "id": rid, "method": "tools/call",
+        "params": {"name": name, "arguments": arguments},
+    })
+    assert "error" not in data, data
+    return json.loads(data["result"]["content"][0]["text"])
+
+
+_LONG = "\n\n".join(
+    f"Paragraph {i}: ordinary filler text about weather, markets and sports." for i in range(400)
+) + "\n\nThe axolotl regenerates its limbs, spinal cord and heart.\n"
+
+
+def test_mcp_add_and_delete_keep_passage_index_in_sync(client):
+    import server
+    added = _call(client, "mempalace_add_drawer", {"wing": "Web", "room": "t", "content": _LONG})
+    did = added["drawer_id"]
+    idx = server._index()
+    assert len(idx._col.get(where={"drawer_id": did})["ids"]) > 3
+    _call(client, "mempalace_delete_drawer", {"drawer_id": did})
+    assert idx._col.get(where={"drawer_id": did})["ids"] == []
+
+
+def test_mcp_search_is_grouped_and_returns_passages(client):
+    added = _call(client, "mempalace_add_drawer", {"wing": "Web", "room": "t", "content": _LONG})
+    out = _call(client, "mempalace_search", {"query": "axolotl regenerates limbs", "limit": 3})
+    assert out["index"] == "passages"
+    ids = [r["drawer_id"] for r in out["results"]]
+    assert ids[0] == added["drawer_id"] and len(ids) == len(set(ids))
+    top = out["results"][0]
+    assert "axolotl" in top["text"] and len(top["text"]) < len(_LONG)
+    assert {"wing", "room", "source_file", "similarity", "distance", "matched_passages"} <= top.keys()
+
+
+def test_mcp_write_wrapper_keeps_argument_whitelist(client):
+    """Plan review B2: wrapping handlers must not disable MemPalace's argument
+    whitelisting (a **kwargs wrapper would let callers spoof internal params)."""
+    import inspect
+    import server
+    for name in ("mempalace_add_drawer", "mempalace_update_drawer", "mempalace_delete_drawer",
+                 "mempalace_diary_write", "mempalace_search"):
+        sig = inspect.signature(server.MEMPALACE_TOOLS[name]["handler"])
+        assert not any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()), name
+    out = _call(client, "mempalace_add_drawer",
+                {"wing": "Web", "room": "t", "content": "spoof test", "bogus_internal": "x"})
+    assert out["success"] is True
+
+
+def test_mcp_status_counts_articles_not_passages(client):
+    _call(client, "mempalace_add_drawer", {"wing": "Web", "room": "t", "content": _LONG})
+    status = _call(client, "mempalace_status", {})
+    assert status["total_drawers"] == 1
+    assert status["wings"] == {"Web": 1}

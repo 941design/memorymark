@@ -1,4 +1,4 @@
-.PHONY: up down logs build ext-chrome ext-firefox ext-all clean test dev events help \
+.PHONY: up down logs build ext-chrome ext-firefox ext-all clean test dev events help reindex reindex-verify \
         install uninstall launchd-status launchd-logs launchd-plist
 
 BRIDGE_URL ?= http://127.0.0.1:21517
@@ -160,6 +160,12 @@ $(DIST_DIR)/memorymark-firefox.zip:
 		-x "*.DS_Store" "manifest.firefox.json"
 	@rm -rf /tmp/memorymark-firefox-build
 	@echo "Built $(DIST_DIR)/memorymark-firefox.zip"
+
+reindex: ## Back up the palace, build/repair the passage index, verify (stop the bridge first)
+	cd bridge && $(UV) run python reindex.py --palace "$(PALACE_PATH)"
+
+reindex-verify: ## Verify the passage index and article store without changing anything
+	cd bridge && $(UV) run python reindex.py --palace "$(PALACE_PATH)" --verify
 
 # Bridge tests (creates venv automatically via uv)
 test: ## Run bridge test suite

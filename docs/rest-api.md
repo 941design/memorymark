@@ -60,8 +60,16 @@ event).
 
 **Response (201):**
 ```json
-{ "success": true, "drawer_id": "drawer_Web_Captures_a1b2c3..." }
+{ "success": true, "drawer_id": "drawer_Web_Captures_a1b2c3...", "indexed": true }
 ```
+
+`indexed` reports whether the drawer's passages were written to the passage
+index. `false` never means the drawer was lost — it is stored; the index is
+repaired by the next reconcile (bridge start-up or `make reindex`). The same
+field is returned by `PUT`, `DELETE` and `POST /api/diary/write`.
+
+Long content is indexed as passages for search; the drawer itself is stored
+verbatim as one drawer, and `drawer_id` is the id to read, update or delete it.
 
 **SSE event emitted:** `add_drawer` with `drawer_id`, `wing`, `room`,
 `added_by`, `content_length`, `content_preview`, `source_url`, `content_hash`.
@@ -104,8 +112,10 @@ Delete a drawer by ID. Irreversible.
 
 **Response (200):**
 ```json
-{ "success": true }
+{ "success": true, "indexed": true }
 ```
+
+Also removes the drawer's passages from the passage index.
 
 **Errors:** 404 if not found.
 
@@ -176,25 +186,34 @@ already been captured.
 
 ### `GET /api/search`
 
-Semantic search across palace drawers.
+Semantic search across palace drawers, **one hit per drawer**. Every drawer is
+indexed as token-bounded passages (see "Passage index" below); a drawer is
+ranked by its best-matching passage, so text deep inside a long article is
+found, not only its opening.
 
-| Parameter      | Type    | Required | Description                                |
-|----------------|---------|----------|--------------------------------------------|
-| `query`        | string  | **yes**  | Search keywords or question                |
-| `wing`         | string  | no       | Filter by wing                             |
-| `room`         | string  | no       | Filter by room                             |
-| `max_distance` | number  | no       | Max cosine distance (unbounded when omitted) |
-| `limit`        | integer | no       | Max results (default 5, capped at 50)      |
+| Parameter         | Type    | Required | Description                                |
+|-------------------|---------|----------|--------------------------------------------|
+| `query`           | string  | **yes**  | Search keywords or question                |
+| `wing`            | string  | no       | Filter by wing                             |
+| `room`            | string  | no       | Filter by room                             |
+| `max_distance`    | number  | no       | Max cosine distance of the best passage (unbounded when omitted) |
+| `limit`           | integer | no       | Max results (default 5, capped at 50)      |
+| `include_content` | boolean | no       | Include each drawer's full `content` (default `true`). Set `false` when the passage is enough — full articles can be up to 200 000 characters. |
 
 **Response:**
 ```json
 {
   "query": "python programming",
   "filters": { "wing": null, "room": null },
+  "index": "passages",
   "results": [
     {
       "drawer_id": "drawer_Web_Captures_a1b2c3...",
       "content": "# Python Tutorial\n...",
+      "passage": "...the best-matching passage...",
+      "passage_start": 4210,
+      "passage_end": 5188,
+      "matched_passages": 3,
       "metadata": {
         "source_url": "https://example.com/python",
         "title": "Python Tutorial",
@@ -209,9 +228,20 @@ Semantic search across palace drawers.
 }
 ```
 
-Each result object is guaranteed to include `drawer_id`, `content`, `metadata`
-(with `source_url`, `title`, `timestamp`), `distance`, `wing`, `room`, and
-`added_by`.
+Each result object is guaranteed to include `drawer_id`, `passage`,
+`passage_start`, `passage_end` (char offsets into the drawer content, so
+`content[passage_start:passage_end] == passage`), `matched_passages` (how many
+of the drawer's passages were among the nearest neighbours), `metadata` (with
+`source_url`, `title`, `timestamp`), `distance`, `wing`, `room`, `added_by`,
+and `content` unless `include_content=false`.
+
+`distance` is the best *passage's* distance. Passages match more tightly than
+whole articles did, so distances are generally lower than before the passage
+index existed; re-tune any `max_distance` thresholds accordingly.
+
+`index` is `"passages"` normally, or `"articles"` while the passage index is
+still empty (fresh install before the first reconcile): then results come from
+the legacy one-vector-per-drawer search, and `passage` is the drawer's opening.
 
 ---
 
@@ -224,9 +254,40 @@ Palace overview: total drawers, wing and room counts.
 {
   "total_drawers": 42,
   "wings": { "Web": 12, "Code": 30 },
-  "rooms": { "Captures": 8, "Architecture": 4 }
+  "rooms": { "Captures": 8, "Architecture": 4 },
+  "passage_index": {
+    "path": "/…/palace/memorymark-passages",
+    "passages": 391,
+    "indexed_articles": 42,
+    "coverage": 1.0,
+    "chunker_version": 1,
+    "reconcile": { "state": "done", "mode": "quick", "total": 0, "processed": 0, "...": "..." }
+  }
 }
 ```
+
+Counts are drawers (articles), never passages. `passage_index.coverage` is
+`indexed_articles / total_drawers`; `reconcile` shows the progress of the
+background reconcile started at bridge start-up.
+
+### Passage index
+
+MemPalace's embedding model reads only the first 256 tokens of a drawer. The
+bridge therefore maintains a derived passage index (`<palace>/memorymark-passages/`,
+override with `MEMORYMARK_INDEX_PATH`): each drawer is split into overlapping
+passages of at most 230 model tokens, preferring paragraph, line and sentence
+boundaries, and each passage is embedded separately. Passages store only char
+offsets into their drawer, never a copy of the text.
+
+- The article store is never modified by the index. Deleting the index
+  directory is a complete rollback (search falls back to article level).
+- REST and MCP writes update the index immediately; the bridge reconciles it
+  in the background at start-up (`MEMORYMARK_RECONCILE_ON_START=0` disables).
+  Writers that bypass the bridge are picked up by that reconcile (id/wing/room
+  changes) or by `make reindex` (also content edits, via content hashes).
+- `make reindex` backs up the palace, rebuilds what is missing or stale, and
+  verifies that every article is still present and byte-identical and fully
+  covered by passages. `make reindex-verify` only verifies.
 
 ---
 
@@ -307,6 +368,8 @@ in the bridge's WAL and appears in the SSE stream.
   "timestamp": "2026-04-16T10:15:30.123456"
 }
 ```
+
+Diary entries are drawers too and are indexed like any other drawer.
 
 **SSE event emitted:** `diary_write` with `agent_name`, `topic`, `entry_id`,
 `entry_preview`.

@@ -1,5 +1,8 @@
 import asyncio
+import functools
 import hashlib
+import os
+import threading
 import json
 import logging
 import re
@@ -37,6 +40,8 @@ from mempalace.mcp_server import (
     tool_status,
 )
 from mempalace.searcher import build_where_filter
+
+import passages
 
 # Drawer/diary content cap. MemPalace defaults to 100_000 characters; the
 # bridge doubles it. The override is also installed into mempalace.mcp_server
@@ -92,6 +97,174 @@ async def _mcp_call_tool(name: str, arguments: dict) -> list[TextContent]:
     return [TextContent(type="text", text=item.get("text", "")) for item in content]
 
 
+# ---------------------------------------------------------------------------
+# Passage index (see passages.py, specs/passage-index-spec.md)
+# ---------------------------------------------------------------------------
+
+
+def _index() -> passages.PassageIndex:
+    return passages.get_index(_mp._config.palace_path, lambda: _get_collection())
+
+
+def _sync_index(drawer_id: str | None) -> bool:
+    """Sync one drawer's passages; never raises (the article is already stored).
+
+    Returns False on failure; the next reconcile repairs it.
+    """
+    if not drawer_id:
+        return False
+    try:
+        _index().sync(drawer_id)
+        return True
+    except Exception:
+        logger.exception("passage index sync failed for %s", drawer_id)
+        return False
+
+
+def _wrap_write_tool(tool_name: str, id_from) -> None:
+    """Sync the passage index after a successful MemPalace MCP write.
+
+    functools.wraps keeps the original signature visible to inspect.signature,
+    so handle_request still whitelists arguments against the tool schema
+    (a bare **kwargs wrapper would disable that and allow spoofing added_by).
+    """
+    original = MEMPALACE_TOOLS[tool_name]["handler"]
+    if getattr(original, "_memorymark_wrapped", False):
+        return
+
+    @functools.wraps(original)
+    def handler(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if isinstance(result, dict) and result.get("success"):
+            _sync_index(id_from(result, kwargs))
+        return result
+
+    handler._memorymark_wrapped = True
+    MEMPALACE_TOOLS[tool_name]["handler"] = handler
+
+
+_wrap_write_tool("mempalace_add_drawer", lambda r, kw: r.get("drawer_id"))
+_wrap_write_tool("mempalace_update_drawer", lambda r, kw: r.get("drawer_id") or kw.get("drawer_id"))
+_wrap_write_tool("mempalace_delete_drawer", lambda r, kw: r.get("drawer_id") or kw.get("drawer_id"))
+_wrap_write_tool("mempalace_diary_write", lambda r, kw: r.get("entry_id"))
+
+
+def _article_search(query: str, where: dict | None, limit: int, max_distance: float | None) -> list[dict]:
+    """Legacy article-level search; used while the passage index is empty."""
+    col = _get_collection()
+    if col is None:
+        return []
+    kwargs = {"query_texts": [query], "n_results": limit, "include": ["documents", "metadatas", "distances"]}
+    if where:
+        kwargs["where"] = where
+    res = col.query(**kwargs)
+    hits = []
+    ids = res["ids"][0] if res.get("ids") else []
+    for did, doc, meta, dist in zip(ids, res["documents"][0], res["metadatas"][0], res["distances"][0]):
+        if max_distance is not None and dist > max_distance:
+            continue
+        doc = doc or ""
+        hits.append({
+            "drawer_id": did, "document": doc, "metadata": meta or {}, "distance": dist,
+            "passage_start": 0, "passage_end": min(len(doc), 1000), "matched_passages": 1,
+        })
+    return hits
+
+
+def grouped_search(query: str, wing: str | None, room: str | None, limit: int,
+                   max_distance: float | None) -> tuple[list[dict], str]:
+    """One hit per article. Returns (hits, index_used: "passages" | "articles")."""
+    where = build_where_filter(wing, room)
+    idx = _index()
+    if idx.passage_count() == 0:
+        return _article_search(query, where, limit, max_distance), "articles"
+    return idx.search(query, where=where or None, limit=limit, max_distance=max_distance), "passages"
+
+
+def _mcp_search(query: str, limit: int = 5, wing: str = None, room: str = None,
+                max_distance: float = 1.5, min_similarity: float = None, context: str = None):
+    """MemPalace's mempalace_search, answered from the passage index.
+
+    Keeps MemPalace's result keys (text, wing, room, source_file, similarity,
+    distance); ``text`` is the best-matching passage. Adds drawer_id, title,
+    source_url, matched_passages.
+    """
+    limit = max(1, min(limit, _mp._MAX_RESULTS))
+    try:
+        wing = _mp._sanitize_optional_name(wing, "wing")
+        room = _mp._sanitize_optional_name(room, "room")
+    except ValueError as e:
+        return {"error": str(e)}
+    dist = (1.0 - min_similarity) if min_similarity is not None else max_distance
+    sanitized = _mp.sanitize_query(query)
+    try:
+        hits, used = grouped_search(
+            sanitized["clean_query"], wing, room, limit, dist if dist and dist > 0 else None
+        )
+    except Exception as e:
+        logger.exception("mcp search failed")
+        return {"error": f"Search error: {e}"}
+    results = []
+    for h in hits:
+        meta = h["metadata"]
+        source = meta.get("source_url") or meta.get("source_file", "")
+        results.append({
+            "drawer_id": h["drawer_id"],
+            "text": h["document"][h["passage_start"]:h["passage_end"]],
+            "wing": meta.get("wing", "unknown"),
+            "room": meta.get("room", "unknown"),
+            "source_file": os.path.basename(meta.get("source_file", "") or "") or "?",
+            "source_url": source,
+            "title": meta.get("title", ""),
+            "matched_passages": h["matched_passages"],
+            "similarity": round(max(0.0, 1 - h["distance"]), 3),
+            "distance": round(h["distance"], 4),
+        })
+    result = {"query": query, "filters": {"wing": wing, "room": room}, "index": used, "results": results}
+    if sanitized["was_sanitized"]:
+        result["query_sanitized"] = True
+        result["sanitizer"] = {
+            "method": sanitized["method"],
+            "original_length": sanitized["original_length"],
+            "clean_length": sanitized["clean_length"],
+            "clean_query": sanitized["clean_query"],
+        }
+    if context:
+        result["context_received"] = True
+    return result
+
+
+# Same signature as MemPalace's tool_search, so handle_request's argument
+# whitelisting is unaffected; functools.update_wrapper keeps our docstring.
+functools.update_wrapper(_mcp_search, _mp.tool_search, assigned=("__module__", "__name__", "__qualname__"))
+MEMPALACE_TOOLS["mempalace_search"]["handler"] = _mcp_search
+MEMPALACE_TOOLS["mempalace_search"]["description"] = (
+    "Semantic search over every passage of every drawer. Returns one hit per drawer: "
+    "'text' is the best-matching passage, 'drawer_id' identifies the drawer — use "
+    "mempalace_get_drawer for its full content. IMPORTANT: 'query' must contain ONLY "
+    "search keywords. Use 'context' for background. Results with cosine distance > "
+    "max_distance are filtered out."
+)
+
+
+def _start_reconcile_thread() -> threading.Thread | None:
+    if os.environ.get("MEMORYMARK_RECONCILE_ON_START", "1") == "0":
+        return None
+
+    def run():
+        try:
+            if _get_collection() is None:
+                return
+            rs = _index().reconcile(full=False)
+            logger.info("passage index reconcile: %s", rs.as_dict())
+        except Exception:
+            logger.exception("start-up passage reconcile failed")
+
+    t = threading.Thread(target=run, name="passage-reconcile", daemon=True)
+    t.start()
+    return t
+
+
 # StreamableHTTPSessionManager can only be run() once per instance, so we
 # rebuild it each time the FastAPI lifespan enters (important for tests that
 # spin up TestClient repeatedly).
@@ -106,6 +279,7 @@ async def _lifespan(app: FastAPI):
     )
     from events import start_tailer, stop_tailer
     async with _mcp_session_manager.run():
+        _start_reconcile_thread()
         await start_tailer()
         yield
         await stop_tailer()
@@ -202,7 +376,7 @@ def create_drawer(req: CreateDrawerRequest):
     try:
         existing = col.get(ids=[drawer_id])
         if existing and existing["ids"]:
-            return {"success": True, "drawer_id": drawer_id}
+            return {"success": True, "drawer_id": drawer_id, "indexed": _sync_index(drawer_id)}
     except Exception:
         pass
 
@@ -242,7 +416,7 @@ def create_drawer(req: CreateDrawerRequest):
         raise HTTPException(status_code=500, detail=str(e))
     _mp._metadata_cache = None
 
-    return {"success": True, "drawer_id": drawer_id}
+    return {"success": True, "drawer_id": drawer_id, "indexed": _sync_index(drawer_id)}
 
 
 @app.put("/api/drawers/{drawer_id}")
@@ -321,7 +495,7 @@ def update_drawer(drawer_id: str, req: UpdateDrawerRequest):
         raise HTTPException(status_code=500, detail=str(e))
     _mp._metadata_cache = None
 
-    return {"success": True, "drawer_id": drawer_id}
+    return {"success": True, "drawer_id": drawer_id, "indexed": _sync_index(drawer_id)}
 
 
 @app.delete("/api/drawers/{drawer_id}")
@@ -332,7 +506,8 @@ def delete_drawer(drawer_id: str):
         if _is_not_found(result):
             raise HTTPException(status_code=404, detail=error)
         raise HTTPException(status_code=400, detail=error)
-    return {"success": True}
+    # tool_delete_drawer is called directly (not via the MCP TOOLS wrapper).
+    return {"success": True, "indexed": _sync_index(drawer_id)}
 
 
 # ---------------------------------------------------------------------------
@@ -347,66 +522,49 @@ def search(
     room: str | None = Query(None),
     max_distance: float | None = Query(None),
     limit: int = Query(5),
+    include_content: bool = Query(True),
 ):
+    """One hit per article, ranked by its best-matching passage."""
     limit = max(1, min(limit, 50))
-    col = _get_collection()
-    if col is None:
-        return {
-            "query": query,
-            "filters": {"wing": wing, "room": room},
-            "results": [],
-        }
-
     try:
         wing_filter = sanitize_name(wing, "wing") if wing else None
         room_filter = sanitize_name(room, "room") if room else None
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    where = build_where_filter(wing_filter, room_filter)
-    query_kwargs = {
-        "query_texts": [query],
-        "n_results": limit,
-        "include": ["documents", "metadatas", "distances"],
-    }
-    if where:
-        query_kwargs["where"] = where
+    empty = {"query": query, "filters": {"wing": wing_filter, "room": room_filter}, "results": [], "index": "articles"}
+    if _get_collection() is None:
+        return empty
 
     try:
-        chroma_results = col.query(**query_kwargs)
+        hits, used = grouped_search(query, wing_filter, room_filter, limit, max_distance)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {e}")
 
-    ids = chroma_results["ids"][0] if chroma_results.get("ids") else []
-    docs = chroma_results["documents"][0] if chroma_results.get("documents") else []
-    metas = chroma_results["metadatas"][0] if chroma_results.get("metadatas") else []
-    dists = chroma_results["distances"][0] if chroma_results.get("distances") else []
-
-    hits = []
-    for drawer_id, doc, meta, dist in zip(ids, docs, metas, dists):
-        if max_distance is not None and dist > max_distance:
-            continue
-        meta = meta or {}
-        source_url = meta.get("source_url") or meta.get("source_file", "")
-        hits.append({
-            "drawer_id": drawer_id,
-            "content": doc or "",
+    results = []
+    for h in hits:
+        meta = h["metadata"] or {}
+        doc = h["document"]
+        item = {
+            "drawer_id": h["drawer_id"],
+            "passage": doc[h["passage_start"]:h["passage_end"]],
+            "passage_start": h["passage_start"],
+            "passage_end": h["passage_end"],
+            "matched_passages": h["matched_passages"],
             "metadata": {
-                "source_url": source_url,
+                "source_url": meta.get("source_url") or meta.get("source_file", ""),
                 "title": meta.get("title", ""),
                 "timestamp": meta.get("timestamp") or meta.get("filed_at", ""),
             },
-            "distance": round(dist, 4),
+            "distance": round(h["distance"], 4),
             "wing": meta.get("wing", ""),
             "room": meta.get("room", ""),
             "added_by": meta.get("added_by", ""),
-        })
-
-    return {
-        "query": query,
-        "filters": {"wing": wing_filter, "room": room_filter},
-        "results": hits,
-    }
+        }
+        if include_content:
+            item["content"] = doc
+        results.append(item)
+    return {**empty, "results": results, "index": used}
 
 
 @app.get("/api/status")
@@ -414,6 +572,13 @@ def status():
     result = tool_status()
     if "error" in result and "total_drawers" not in result:
         return {"total_drawers": 0, "wings": {}, "rooms": {}}
+    try:
+        stats = _index().stats()
+        total = result.get("total_drawers", 0)
+        stats["coverage"] = min(1.0, round(stats["indexed_articles"] / total, 4)) if total else 1.0
+        result["passage_index"] = stats
+    except Exception as e:
+        result["passage_index"] = {"error": str(e)}
     return result
 
 
@@ -708,4 +873,5 @@ def diary_write(req: DiaryWriteRequest):
     )
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
-    return result
+    # tool_diary_write is called directly (not via the MCP TOOLS wrapper).
+    return {**result, "indexed": _sync_index(result.get("entry_id"))}

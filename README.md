@@ -83,6 +83,8 @@ Click "Open Chat" in the overlay or press the shortcut again while the overlay i
 memorymark/
   bridge/
     server.py              # FastAPI REST API wrapping MemPalace
+    passages.py            # Passage index: token-bounded chunks for full-text semantic search
+    reindex.py             # Build / repair / verify the passage index (migration tool)
     Dockerfile             # Python 3.11-slim container
     requirements.txt       # mempalace, fastapi, uvicorn
     conftest.py            # Pytest fixtures (isolated test palace)
@@ -107,6 +109,29 @@ memorymark/
   Makefile                 # Build and management targets
 ```
 
+## Search and the passage index
+
+MemPalace's embedding model (all-MiniLM-L6-v2) reads only the first 256 tokens
+(~1 000 characters) of a drawer, while drawers written through the bridge are
+whole articles. The bridge therefore keeps a **passage index** next to the
+palace: every drawer is split into token-bounded, overlapping passages, each
+embedded separately. Search (`GET /api/search`, MCP `mempalace_search`) ranks
+articles by their best-matching passage and returns one hit per article.
+
+- Articles are never modified: the index is derived data in
+  `<palace>/memorymark-passages/` (override with `MEMORYMARK_INDEX_PATH`).
+  Deleting that directory is a complete rollback.
+- Writes through REST or MCP update the index immediately. On start-up the
+  bridge reconciles the index in the background (new, deleted or moved
+  drawers; disable with `MEMORYMARK_RECONCILE_ON_START=0`). Progress and
+  coverage are in `GET /api/status` → `passage_index`.
+- `make reindex` is the full migration/repair: palace backup, content-hash
+  reconcile, then verification that every article is unchanged and fully
+  covered by passages. Expect hours for a large palace (≈30 passages/s on a
+  4-core CPU, ~9 passages per 5 000-character article); it is resumable.
+- Until the index has any passages, search falls back to article-level
+  search (`"index": "articles"` in the response).
+
 ## Makefile Targets
 
 | Target | Description |
@@ -122,6 +147,8 @@ memorymark/
 | `make launchd-logs` | Tail the launchd agent logs |
 | `make launchd-plist` | Print the generated plist without installing it |
 | `make test` | Run bridge test suite |
+| `make reindex` | Back up the palace, build/repair the passage index, verify (stop the bridge first) |
+| `make reindex-verify` | Verify article store + passage index without changing anything |
 | `make ext-chrome` | Package Chrome extension zip |
 | `make ext-firefox` | Package Firefox extension zip |
 | `make ext-all` | Build both extension zips |

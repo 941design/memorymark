@@ -412,7 +412,9 @@ async function handleChat(userMessage, tabId, sourceUrl) {
         const meta = r.metadata || {};
         const label = meta.title || meta.source_url || 'unknown';
         return `[${i + 1}] "${label}" (${r.wing}/${r.room}, distance: ${r.distance})\n` +
-          `${(r.content || '').substring(0, 1500)}`;
+          // Best-matching passage of the page (bridge passage index); fall back
+          // to the page opening for older bridges.
+          `${(r.passage || r.content || '').substring(0, 1500)}`;
       }).join('\n\n');
   }
 
