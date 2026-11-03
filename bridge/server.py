@@ -145,9 +145,11 @@ def _is_not_found(result: dict) -> bool:
 
 @app.get("/api/health")
 def health():
-    result = tool_status()
-    count = result.get("total_drawers", 0)
-    return {"status": "ok", "drawers": count}
+    # col.count() only -- tool_status() also walks every drawer's metadata to
+    # build wing/room histograms, which takes seconds on a large palace and
+    # trips liveness probes (e.g. `make install`'s 2s curl timeout).
+    col = _get_collection()
+    return {"status": "ok", "drawers": col.count() if col else 0}
 
 
 # ---------------------------------------------------------------------------
