@@ -488,7 +488,7 @@ HTML page
   ├─ 2. Readability: strip nav/ads/boilerplate, isolate article body
   ├─ 3. Turndown: convert cleaned HTML → Markdown (GFM)
   ├─ 4. Fallback: full <body> conversion if Readability fails
-  ├─ 5. Truncate to 100 000 characters
+  ├─ 5. Truncate to 200 000 characters
   └─ 6. Prepend header block (title, source URL, author/date)
 ```
 
@@ -552,8 +552,9 @@ directly through Turndown. If Turndown also fails, fall back to plain
 
 ### Step 5 — Truncation
 
-Cap the Markdown body at **100 000 characters**. Flag `truncated: true` in the
-return value so callers can note the loss.
+Cap the assembled payload (header from Step 6 + Markdown body) at
+**200 000 characters** — the bridge rejects anything longer with a 400. Flag
+`truncated: true` in the return value so callers can note the loss.
 
 ### Step 6 — Header block
 

@@ -20,7 +20,7 @@ from mcp.shared.exceptions import McpError
 from mcp.types import ErrorData, TextContent, Tool
 
 import mempalace.mcp_server as _mp
-from mempalace.config import sanitize_content, sanitize_name
+from mempalace.config import sanitize_content as _mp_sanitize_content, sanitize_name
 from mempalace.mcp_server import (
     TOOLS as MEMPALACE_TOOLS,
     _get_collection,
@@ -37,6 +37,19 @@ from mempalace.mcp_server import (
     tool_status,
 )
 from mempalace.searcher import build_where_filter
+
+# Drawer/diary content cap. MemPalace defaults to 100_000 characters; the
+# bridge doubles it. The override is also installed into mempalace.mcp_server
+# (which imported sanitize_content by name) so MCP writes at /mcp enforce the
+# same cap as /api/*. Keep extension/content.js MAX_LENGTH in sync.
+MAX_CONTENT_LENGTH = 200_000
+
+
+def sanitize_content(value: str) -> str:
+    return _mp_sanitize_content(value, max_length=MAX_CONTENT_LENGTH)
+
+
+_mp.sanitize_content = sanitize_content
 
 # ---------------------------------------------------------------------------
 # MCP Streamable HTTP: expose MemPalace's full tool surface at /mcp so agent

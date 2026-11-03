@@ -189,13 +189,14 @@ def test_create_drawer_defaults_added_by_to_memorymark(client):
 
 
 def test_create_drawer_rejects_oversized_content(client):
-    """Regression: content over 100_000 chars → 400 (sanitize_content limit).
+    """Regression: content over MAX_CONTENT_LENGTH chars → 400.
 
     This is the real failure mode captured pages like arxiv HTML hit: the
-    extension truncates its markdown to exactly 100_000, then prepends a
+    extension truncated its markdown to exactly the cap, then prepended a
     title/source header, pushing the payload past the bridge's cap.
     """
-    oversized = "x" * 100_001
+    from server import MAX_CONTENT_LENGTH
+    oversized = "x" * (MAX_CONTENT_LENGTH + 1)
     resp = client.post("/api/drawers", json={
         "wing": "Web",
         "room": "Captures",
@@ -203,6 +204,19 @@ def test_create_drawer_rejects_oversized_content(client):
     })
     assert resp.status_code == 400
     assert "maximum length" in resp.json()["detail"]
+
+
+def test_create_drawer_accepts_content_at_max_length(client):
+    """Content exactly at the bridge cap (200_000, double MemPalace's 100_000
+    default) is accepted."""
+    from server import MAX_CONTENT_LENGTH
+    assert MAX_CONTENT_LENGTH == 200_000
+    resp = client.post("/api/drawers", json={
+        "wing": "Web",
+        "room": "Captures",
+        "content": "x" * MAX_CONTENT_LENGTH,
+    })
+    assert resp.status_code == 201, resp.text
 
 
 def test_create_drawer_accepts_url_with_dots_in_path(client):

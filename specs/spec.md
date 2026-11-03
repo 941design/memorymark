@@ -84,7 +84,7 @@ Content format stored in MemPalace:
 {Markdown body from Readability + Turndown}
 ```
 
-Content is capped at 100,000 characters; oversized pages are truncated with a warning.
+Content is capped at 200,000 characters; oversized pages are truncated with a warning.
 
 ### 3.2 Duplicate Detection
 

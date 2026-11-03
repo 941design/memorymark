@@ -416,8 +416,9 @@
 
     // Truncate the assembled payload (header + body) to the bridge's content
     // limit. Truncating only the body before prepending the header pushed
-    // long pages (e.g. arXiv HTML) past 100000 chars and produced a 400.
-    const MAX_LENGTH = 100000;
+    // long pages (e.g. arXiv HTML) past the cap and produced a 400.
+    // Must match MAX_CONTENT_LENGTH in bridge/server.py.
+    const MAX_LENGTH = 200000;
     let truncated = false;
     if (content.length > MAX_LENGTH) {
       content = content.substring(0, MAX_LENGTH);
@@ -453,7 +454,7 @@
     try {
       const extracted = extractContent();
       if (extracted.truncated) {
-        console.warn('[MemoryMark] Content truncated to 100,000 characters');
+        console.warn('[MemoryMark] Content truncated to 200,000 characters');
       }
       chrome.runtime.sendMessage({
         action: 'extract-result',

@@ -142,3 +142,33 @@ def test_mcp_and_rest_see_same_palace(client):
     )
     text = data["result"]["content"][0]["text"]
     assert "UNIQUEMARK42" in text
+
+
+def _add_drawer_via_mcp(client, content):
+    _rpc(client, INITIALIZE)
+    data = _rpc(
+        client,
+        {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "mempalace_add_drawer",
+                "arguments": {"wing": "Web", "room": "test", "content": content},
+            },
+        },
+    )
+    return data["result"]["content"][0]["text"]
+
+
+def test_mcp_add_drawer_uses_bridge_content_cap(client):
+    """MCP writes enforce the bridge's MAX_CONTENT_LENGTH, not MemPalace's
+    100_000 default (server.py overrides mempalace.mcp_server.sanitize_content)."""
+    from server import MAX_CONTENT_LENGTH
+
+    ok = json.loads(_add_drawer_via_mcp(client, "y" * MAX_CONTENT_LENGTH))
+    assert ok.get("success") is True, ok
+
+    too_big = json.loads(_add_drawer_via_mcp(client, "z" * (MAX_CONTENT_LENGTH + 1)))
+    assert too_big.get("success") is not True
+    assert "maximum length" in json.dumps(too_big)
