@@ -3,7 +3,10 @@
 This is the migration for the passage index. It never writes to the article
 collection; it only reads articles and writes the derived index. To *prove*
 that, it records a manifest (sha256 of every article's id, content and
-metadata) before building and checks it again afterwards.
+metadata) before building and checks it again afterwards. Note that the palace's
+chroma.sqlite3 will not stay byte-identical: merely opening a PersistentClient
+updates chroma's ``acquire_write`` lock table (and the SQLite header's change
+counter). The manifest, not a file checksum, is the losslessness proof.
 
     uv run python reindex.py --palace PATH            # backup + build + verify
     uv run python reindex.py --palace PATH --verify   # verify only
